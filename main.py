@@ -7,7 +7,9 @@ import gspread
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Google Sheets 認証 ===
@@ -19,22 +21,16 @@ cred = ServiceAccountCredentials.from_json_keyfile_dict(
 client = gspread.authorize(cred)
 sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
-# === 対象列インデックス ===
 URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
-# === スプレッドシートからデータ取得 ===
 data = sheet.get_all_values()
 for row_num, row in enumerate(data[1:], start=2):
     url = row[URL_COL - 1]
-    if not url:
+    if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
 
-    if "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
-        continue
-
-    # === Chromeヘッドレス起動 ===
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
@@ -45,29 +41,36 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # ログイン処理
-        login_btn = driver.find_element(By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]")
+        login_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
+        )
         login_btn.click()
-        time.sleep(2)
 
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
         driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
-        time.sleep(5)
 
-        # === 募集停止条件の判定 ===
+        # ログイン後、元の物件ページに戻る
+        time.sleep(3)
+        driver.get(url)
+
+        # === 判定処理 ===
         has_application = False
         try:
-            driver.find_element(By.XPATH, "//span[@class='eds-tag__label' and text()='申込あり']")
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//span[@class='eds-tag__label' and text()='申込あり']"))
+            )
             has_application = True
-        except NoSuchElementException:
+        except TimeoutException:
             try:
-                driver.find_element(By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]")
+                WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]"))
+                )
                 has_application = True
-            except NoSuchElementException:
+            except TimeoutException:
                 has_application = False
 
-        # === 判定結果を反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
