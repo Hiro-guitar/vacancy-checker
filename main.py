@@ -7,7 +7,6 @@ import gspread
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Google Sheets 認証 ===
@@ -57,31 +56,24 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # === 判定処理 ===
+        # === 判定処理（メインDOMのみ） ===
         has_application = False
 
-        driver.switch_to.default_content()
-
-        # メインフレームをチェック
-        try:
-            if driver.find_elements(By.XPATH, "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']") \
-               or driver.find_elements(By.XPATH, "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"):
+        # 「申込あり」の要素をチェック
+        application_elems = driver.find_elements(
+            By.XPATH,
+            "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
+        )
+        if application_elems:
+            has_application = True
+        else:
+            # 「エラーコード：404」の要素をチェック
+            error_elems = driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"
+            )
+            if error_elems:
                 has_application = True
-
-            # iframe内もチェック（まだ見つかっていなければ）
-            if not has_application:
-                iframes = driver.find_elements(By.TAG_NAME, "iframe")
-                for frame in iframes:
-                    driver.switch_to.frame(frame)
-                    if driver.find_elements(By.XPATH, "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']") \
-                       or driver.find_elements(By.XPATH, "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"):
-                        has_application = True
-                        driver.switch_to.default_content()
-                        break
-                    driver.switch_to.default_content()
-        except Exception as e:
-            print(f"[判定処理エラー] {e}")
-            has_application = False
 
         # === スプレッドシートに反映 ===
         if has_application:
