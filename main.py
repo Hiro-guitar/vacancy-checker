@@ -19,10 +19,12 @@ cred = ServiceAccountCredentials.from_json_keyfile_dict(
 client = gspread.authorize(cred)
 sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
+# === 対象列インデックス ===
 URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
+# === スプレッドシートからデータ取得 ===
 data = sheet.get_all_values()
 for row_num, row in enumerate(data[1:], start=2):
     url = row[URL_COL - 1]
@@ -32,6 +34,7 @@ for row_num, row in enumerate(data[1:], start=2):
     if "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
 
+    # === Chromeヘッドレス起動 ===
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
@@ -42,6 +45,7 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
+        # ログイン処理
         login_btn = driver.find_element(By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]")
         login_btn.click()
         time.sleep(2)
@@ -51,17 +55,19 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         time.sleep(5)
 
-        # --- 「申込あり」または「ページが見つかりませんでした」をチェック ---
+        # === 募集停止条件の判定 ===
+        has_application = False
         try:
             driver.find_element(By.XPATH, "//span[@class='eds-tag__label' and text()='申込あり']")
             has_application = True
         except NoSuchElementException:
             try:
-                driver.find_element(By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(text(), '見つかりませんでした')]")
+                driver.find_element(By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]")
                 has_application = True
             except NoSuchElementException:
                 has_application = False
 
+        # === 判定結果を反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
