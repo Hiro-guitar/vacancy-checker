@@ -25,6 +25,9 @@ URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
+# === スクリーンショット保存先フォルダを作成 ===
+os.makedirs("screenshots", exist_ok=True)
+
 for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     url = row[URL_COL - 1]
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
@@ -58,7 +61,6 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         # === 判定処理 ===
         has_application = False
 
-        # 「申込あり」があるか？
         application_elems = driver.find_elements(
             By.XPATH,
             "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
@@ -66,7 +68,6 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         if application_elems:
             has_application = True
         else:
-            # 「エラーコード：404」があるか？
             error_elems = driver.find_elements(
                 By.XPATH,
                 "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
@@ -84,6 +85,9 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
 
     except Exception as e:
         print(f"[Error] Row {row_num}: {e}")
+        screenshot_path = f"screenshots/row_{row_num}.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"→ スクリーンショット保存済み: {screenshot_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
     finally:
         driver.quit()
