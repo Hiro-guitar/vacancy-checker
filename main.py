@@ -33,7 +33,6 @@ for row_num, row in enumerate(data[1:], start=2):
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
 
-    # === Chrome起動（ヘッドレス） ===
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
@@ -74,7 +73,7 @@ for row_num, row in enumerate(data[1:], start=2):
                 WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((
                         By.XPATH,
-                        "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]"
+                        "//div[contains(@class, 'ErrorAnnounce-module_eds-error-announce__note__JAyYr') and contains(normalize-space(), 'エラーコード：404')]"
                     ))
                 )
                 has_application = True
@@ -83,7 +82,7 @@ for row_num, row in enumerate(data[1:], start=2):
 
         # === スプレッドシートに反映 ===
         if has_application:
-            # 申込あり or ページなし → 募集停止
+            # 申込あり or エラーコード404 → 募集停止扱い
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
         else:
