@@ -3,6 +3,7 @@ import json
 import base64
 import time
 import datetime
+import traceback
 import gspread
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -34,7 +35,7 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         continue
 
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(options=options)
@@ -54,16 +55,14 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # === ログイン成功確認（「内見一覧」が表示されるまで待機） ===
+        # === ログイン成功の目印（「内見一覧」）を待つ ===
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '内見一覧')]"))
         )
 
         # === 対象物件ページへ再アクセス ===
         driver.get(url)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
-        )
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
         time.sleep(2)
 
         # === 判定処理 ===
@@ -83,7 +82,7 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             if error_elems:
                 has_application = True
 
-        # === スクリーンショットを保存（確認用） ===
+        # === スクリーンショットを保存 ===
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = f"screenshots/row_{row_num}_{timestamp}.png"
         driver.save_screenshot(screenshot_path)
@@ -99,10 +98,20 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
 
     except Exception as e:
         print(f"[Error] Row {row_num}: {e}")
+        traceback.print_exc()
+
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
-        driver.save_screenshot(screenshot_path)
-        print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
-        sheet.update_cell(row_num, STATUS_COL, "取得失敗")
+        try:
+            driver.save_screenshot(screenshot_path)
+            print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
+        except Exception as ss_e:
+            print(f"[Error] スクリーンショット保存失敗: {ss_e}")
+
+        try:
+            sheet.update_cell(row_num, STATUS_COL, "取得失敗")
+        except Exception as sheet_e:
+            print(f"[Error] スプレッドシート更新失敗: {sheet_e}")
+
     finally:
         driver.quit()
