@@ -69,11 +69,11 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             has_application = True
         except TimeoutException:
             try:
-                # パターン2：「エラーコード：404」テキストだけで判定（クラス条件は外す）
+                # パターン2：「エラーコード：404」判定
                 WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((
                         By.XPATH,
-                        "//*[normalize-space()='エラーコード：404']"
+                        "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"
                     ))
                 )
                 has_application = True
