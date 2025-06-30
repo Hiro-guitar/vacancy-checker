@@ -30,6 +30,10 @@ for row_num, row in enumerate(data[1:], start=2):
     if not url:
         continue
 
+    # いい生活スクエアの物件URLでなければスキップ
+    if "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
+        continue
+
     # === Chromeヘッドレス起動 ===
     options = Options()
     options.add_argument('--headless')
@@ -41,27 +45,25 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # ログインボタン押下
         login_btn = driver.find_element(By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]")
         login_btn.click()
         time.sleep(2)
 
-        # メール・パスワード入力
         driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         time.sleep(5)
 
-        # ページ内テキストで「満室」か「募集中」か判定
         html = driver.page_source
-        if "満室" in html:
-            sheet.update_cell(row_num, STATUS_COL, "満室")
+
+        if "申込あり" in html:
+            # 申込あり → I列を空白にし、K列に終了日時を入れる
+            sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
-        elif "募集中" in html:
-            sheet.update_cell(row_num, STATUS_COL, "募集中")
-            sheet.update_cell(row_num, ENDED_COL, "")  # 募集中になったら終了日リセット
         else:
-            sheet.update_cell(row_num, STATUS_COL, "不明")
+            # 申込なし → 募集中、終了日は空白に
+            sheet.update_cell(row_num, STATUS_COL, "募集中")
+            sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
         print(f"[Error] Row {row_num}: {e}")
