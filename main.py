@@ -7,8 +7,6 @@ import gspread
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -42,6 +40,9 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         time.sleep(2)
 
         # ログイン処理
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
         login_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
@@ -58,27 +59,29 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
 
         # === 判定処理 ===
         has_application = False
+
+        driver.switch_to.default_content()
+
+        # メインフレームをチェック
         try:
-            # パターン1：「申込あり」判定
-            WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((
-                    By.XPATH,
-                    "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']"
-                ))
-            )
-            has_application = True
-        except TimeoutException:
-            try:
-                # パターン2：「エラーコード：404」判定
-                WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((
-                        By.XPATH,
-                        "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"
-                    ))
-                )
+            if driver.find_elements(By.XPATH, "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']") \
+               or driver.find_elements(By.XPATH, "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"):
                 has_application = True
-            except TimeoutException:
-                has_application = False
+
+            # iframe内もチェック（まだ見つかっていなければ）
+            if not has_application:
+                iframes = driver.find_elements(By.TAG_NAME, "iframe")
+                for frame in iframes:
+                    driver.switch_to.frame(frame)
+                    if driver.find_elements(By.XPATH, "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']") \
+                       or driver.find_elements(By.XPATH, "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"):
+                        has_application = True
+                        driver.switch_to.default_content()
+                        break
+                    driver.switch_to.default_content()
+        except Exception as e:
+            print(f"[判定処理エラー] {e}")
+            has_application = False
 
         # === スプレッドシートに反映 ===
         if has_application:
