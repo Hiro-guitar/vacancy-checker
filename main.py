@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import TimeoutException
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Google Sheets 認証 ===
@@ -21,16 +21,19 @@ cred = ServiceAccountCredentials.from_json_keyfile_dict(
 client = gspread.authorize(cred)
 sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
+# === 対象列インデックス ===
 URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
+# === スプレッドシートからデータ取得 ===
 data = sheet.get_all_values()
 for row_num, row in enumerate(data[1:], start=2):
     url = row[URL_COL - 1]
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
 
+    # === Chrome起動（ヘッドレス） ===
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
@@ -41,6 +44,7 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
+        # ログイン処理
         login_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
@@ -51,30 +55,39 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # ログイン後、元の物件ページに戻る
+        # ログイン後に物件ページを再表示
         time.sleep(3)
         driver.get(url)
 
         # === 判定処理 ===
         has_application = False
         try:
-            WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.XPATH, "//span[@class='eds-tag__label' and text()='申込あり']"))
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((
+                    By.XPATH,
+                    "//span[contains(@class, 'eds-tag__label') and contains(normalize-space(), '申込')]"
+                ))
             )
             has_application = True
         except TimeoutException:
             try:
                 WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]"))
+                    EC.presence_of_element_located((
+                        By.XPATH,
+                        "//h2[contains(@class, 'ErrorAnnounce') and contains(normalize-space(), '見つかりませんでした')]"
+                    ))
                 )
                 has_application = True
             except TimeoutException:
                 has_application = False
 
+        # === スプレッドシートに反映 ===
         if has_application:
+            # 申込あり or ページなし → 募集停止
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
         else:
+            # 募集中
             sheet.update_cell(row_num, STATUS_COL, "募集中")
             sheet.update_cell(row_num, ENDED_COL, "")
 
