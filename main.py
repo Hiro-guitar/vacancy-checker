@@ -26,9 +26,7 @@ URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
-# === スプレッドシートからデータ取得 ===
-data = sheet.get_all_values()
-for row_num, row in enumerate(data[1:], start=2):
+for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     url = row[URL_COL - 1]
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
@@ -54,26 +52,28 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # ログイン後に物件ページを再表示
         time.sleep(3)
         driver.get(url)
+        time.sleep(2)
 
         # === 判定処理 ===
         has_application = False
         try:
-            WebDriverWait(driver, 10).until(
+            # パターン1：「申込あり」判定
+            WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((
                     By.XPATH,
-                    "//span[contains(@class, 'eds-tag__label') and contains(normalize-space(), '申込')]"
+                    "//span[contains(@class,'eds-tag__label') and normalize-space()='申込あり']"
                 ))
             )
             has_application = True
         except TimeoutException:
             try:
+                # パターン2：「エラーコード：404」判定
                 WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((
                         By.XPATH,
-                        "//div[contains(@class, 'ErrorAnnounce-module_eds-error-announce__note__JAyYr') and contains(normalize-space(), 'エラーコード：404')]"
+                        "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"
                     ))
                 )
                 has_application = True
@@ -82,11 +82,9 @@ for row_num, row in enumerate(data[1:], start=2):
 
         # === スプレッドシートに反映 ===
         if has_application:
-            # 申込あり or エラーコード404 → 募集停止扱い
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
         else:
-            # 募集中
             sheet.update_cell(row_num, STATUS_COL, "募集中")
             sheet.update_cell(row_num, ENDED_COL, "")
 
