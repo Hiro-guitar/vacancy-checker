@@ -109,18 +109,20 @@ for row_num, row in enumerate(all_rows, start=2):
             if error_elems:
                 has_application = True
 
-        # 結果をスプレッドシートに反映（日本時間で記録）
         now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
+
+        # 結果をスプレッドシートに反映
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
-            sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+            # すでに終了日が入力されていなければ、記録する
+            if not row[ENDED_COL - 1].strip():
+                sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
         else:
             sheet.update_cell(row_num, STATUS_COL, "募集中")
             sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
-        timestamp = datetime.datetime.now(ZoneInfo("Asia/Tokyo")).strftime('%Y%m%d_%H%M%S')
-        screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
+        screenshot_path = f"screenshots/row_{row_num}_error_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         driver.save_screenshot(screenshot_path)
         print(f"Error:  Row {row_num}: {e}")
         print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
