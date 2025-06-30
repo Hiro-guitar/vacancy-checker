@@ -51,11 +51,16 @@ for row_num, row in enumerate(data[1:], start=2):
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         time.sleep(5)
 
+        # --- 「申込あり」または「ページが見つかりませんでした」をチェック ---
         try:
             driver.find_element(By.XPATH, "//span[@class='eds-tag__label' and text()='申込あり']")
             has_application = True
         except NoSuchElementException:
-            has_application = False
+            try:
+                driver.find_element(By.XPATH, "//h2[contains(@class, 'ErrorAnnounce') and contains(text(), '見つかりませんでした')]")
+                has_application = True
+            except NoSuchElementException:
+                has_application = False
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
