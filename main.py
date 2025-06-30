@@ -3,7 +3,6 @@ import json
 import base64
 import time
 import datetime
-import traceback
 import gspread
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -11,6 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 # === Google Sheets 認証 ===
 json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
@@ -35,7 +35,7 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         continue
 
     options = Options()
-    options.add_argument('--headless=new')
+    options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(options=options)
@@ -55,14 +55,24 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # === ログイン成功の目印（「内見一覧」）を待つ ===
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '内見一覧')]"))
-        )
+        # === 「内見一覧」が現れるのを待機 ===
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '内見一覧')]"))
+            )
+        except TimeoutException:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot_path = f"screenshots/row_{row_num}_loginfail_{timestamp}.png"
+            driver.save_screenshot(screenshot_path)
 
-        # === 対象物件ページへ再アクセス ===
+            with open(f"screenshots/row_{row_num}_loginfail_{timestamp}.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+
+            print(f"[Error] Row {row_num}: ログイン後の画面に「内見一覧」が見つかりません")
+            continue  # この物件はスキップ
+
+        # === 再度物件ページへアクセス ===
         driver.get(url)
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
         time.sleep(2)
 
         # === 判定処理 ===
@@ -82,12 +92,6 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             if error_elems:
                 has_application = True
 
-        # === スクリーンショットを保存 ===
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        screenshot_path = f"screenshots/row_{row_num}_{timestamp}.png"
-        driver.save_screenshot(screenshot_path)
-        print(f"→ スクリーンショット保存済み: {screenshot_path}")
-
         # === スプレッドシート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
@@ -97,21 +101,11 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
-        print(f"[Error] Row {row_num}: {e}")
-        traceback.print_exc()
-
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
-        try:
-            driver.save_screenshot(screenshot_path)
-            print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
-        except Exception as ss_e:
-            print(f"[Error] スクリーンショット保存失敗: {ss_e}")
-
-        try:
-            sheet.update_cell(row_num, STATUS_COL, "取得失敗")
-        except Exception as sheet_e:
-            print(f"[Error] スプレッドシート更新失敗: {sheet_e}")
-
+        driver.save_screenshot(screenshot_path)
+        print(f"[Error] Row {row_num}: {e}")
+        print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
+        sheet.update_cell(row_num, STATUS_COL, "取得失敗")
     finally:
         driver.quit()
