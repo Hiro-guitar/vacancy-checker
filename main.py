@@ -10,6 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from zoneinfo import ZoneInfo
 
 # === Google Sheets 認証 ===
 json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
