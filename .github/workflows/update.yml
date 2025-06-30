@@ -1,0 +1,30 @@
+name: Auto Update Vacancy Status
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 毎時0分に実行
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run main.py
+        run: python main.py
+        env:
+          GSPREAD_JSON: ${{ secrets.GSPREAD_JSON }}
+          ES_EMAIL: ${{ secrets.ES_EMAIL }}
+          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
