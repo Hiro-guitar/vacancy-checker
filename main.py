@@ -25,13 +25,15 @@ URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
+# === 各URLに対する処理 ===
 for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     url = row[URL_COL - 1]
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
         continue
 
+    # Chrome オプション設定
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')  # 安定版 headless
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     driver = webdriver.Chrome(options=options)
@@ -40,41 +42,54 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # === ログイン処理 ===
+        # ログイン画面まで待機
         login_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
         login_btn.click()
 
+        # ログイン情報入力
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
         driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        time.sleep(3)
+        # ログイン完了後に元のURLに再遷移
+        WebDriverWait(driver, 10).until(EC.url_changes(url))
         driver.get(url)
-        time.sleep(2)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+        )
+
+        # 判定要素が現れるまで最大10秒待機
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.any_of(
+                    EC.presence_of_element_located((By.XPATH, "//span[contains(text(), '申込あり')]")),
+                    EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'エラーコード：404')]"))
+                )
+            )
+        except:
+            print(f"[Warning] Row {row_num}: 判定要素が出現しませんでした")
 
         # === 判定処理 ===
         has_application = False
 
-        # 「申込あり」があるか？
         application_elems = driver.find_elements(
             By.XPATH,
-            "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
+            "//span[contains(text(), '申込あり')]"
         )
         if application_elems:
             has_application = True
         else:
-            # 「エラーコード：404」があるか？
             error_elems = driver.find_elements(
                 By.XPATH,
-                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
+                "//div[contains(text(), 'エラーコード：404')]"
             )
             if error_elems:
                 has_application = True
 
-        # === スプレッドシート更新 ===
+        # === スプレッドシートに反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
@@ -85,5 +100,6 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     except Exception as e:
         print(f"[Error] Row {row_num}: {e}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
+
     finally:
         driver.quit()
