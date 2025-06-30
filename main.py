@@ -8,6 +8,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from oauth2client.service_account import ServiceAccountCredentials
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # === Google Sheets 認証 ===
 json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
@@ -38,10 +40,7 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # ログイン処理
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
+        # === ログイン処理 ===
         login_btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
@@ -56,10 +55,10 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.get(url)
         time.sleep(2)
 
-        # === 判定処理（メインDOMのみ） ===
+        # === 判定処理 ===
         has_application = False
 
-        # 「申込あり」の要素をチェック
+        # 「申込あり」があるか？
         application_elems = driver.find_elements(
             By.XPATH,
             "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
@@ -67,15 +66,15 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         if application_elems:
             has_application = True
         else:
-            # 「エラーコード：404」の要素をチェック
+            # 「エラーコード：404」があるか？
             error_elems = driver.find_elements(
                 By.XPATH,
-                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and normalize-space()='エラーコード：404']"
+                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
             )
             if error_elems:
                 has_application = True
 
-        # === スプレッドシートに反映 ===
+        # === スプレッドシート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
