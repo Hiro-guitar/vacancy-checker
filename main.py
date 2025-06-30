@@ -26,9 +26,10 @@ URL_COL = 13   # M列
 STATUS_COL = 9 # I列
 ENDED_COL = 11 # K列
 
-# === スクリーンショット保存先フォルダを作成 ===
+# === スクリーンショット保存先フォルダ作成 ===
 os.makedirs("screenshots", exist_ok=True)
 
+# === 各行ループ処理 ===
 for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     url = row[URL_COL - 1]
     if not url or "https://rent.es-square.net/bukken/chintai/search/detail/" not in url:
@@ -55,10 +56,16 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # === 「内見一覧」が現れるのを待機 ===
+        time.sleep(3)
+        driver.get(url)
+        time.sleep(2)
+
+        # === 「物件概要」または「エラーコード：404」があるかを確認 ===
         try:
             WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '内見一覧')]"))
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(), '物件概要') or contains(text(), 'エラーコード：404')]")
+                )
             )
         except TimeoutException:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -68,14 +75,10 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             with open(f"screenshots/row_{row_num}_loginfail_{timestamp}.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
 
-            print(f"[Error] Row {row_num}: ログイン後の画面に「内見一覧」が見つかりません")
-            continue  # この物件はスキップ
+            print(f"[Error] Row {row_num}: ログイン後に「物件概要」または「エラーコード：404」が見つかりません")
+            continue
 
-        # === 再度物件ページへアクセス ===
-        driver.get(url)
-        time.sleep(2)
-
-        # === 判定処理 ===
+        # === 募集終了判定 ===
         has_application = False
 
         application_elems = driver.find_elements(
@@ -101,10 +104,10 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
+        print(f"[Error] Row {row_num}: {e}")
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         driver.save_screenshot(screenshot_path)
-        print(f"[Error] Row {row_num}: {e}")
         print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
     finally:
