@@ -54,16 +54,17 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        time.sleep(3)
+        # === ログイン成功確認（「内見一覧」が表示されるまで待機） ===
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '内見一覧')]"))
+        )
 
-        # ログイン成功後に物件ページを開き直す
+        # === 対象物件ページへ再アクセス ===
         driver.get(url)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+        )
         time.sleep(2)
-
-        # ★ここでスクリーンショットを撮る（ログイン後の物件ページ表示時点）
-        screenshot_path = f"screenshots/row_{row_num}.png"
-        driver.save_screenshot(screenshot_path)
-        print(f"→ スクリーンショット保存済み: {screenshot_path}")
 
         # === 判定処理 ===
         has_application = False
@@ -82,6 +83,12 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             if error_elems:
                 has_application = True
 
+        # === スクリーンショットを保存（確認用） ===
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = f"screenshots/row_{row_num}_{timestamp}.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"→ スクリーンショット保存済み: {screenshot_path}")
+
         # === スプレッドシート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
@@ -92,8 +99,8 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
 
     except Exception as e:
         print(f"[Error] Row {row_num}: {e}")
-        # 例外発生時もスクリーンショットを撮る
-        screenshot_path = f"screenshots/error_row_{row_num}.png"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         driver.save_screenshot(screenshot_path)
         print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
