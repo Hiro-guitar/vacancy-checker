@@ -37,6 +37,9 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')  # ← 追加
+    options.add_argument('--window-size=1280,800')  # ← 追加
+
     driver = webdriver.Chrome(options=options)
 
     try:
@@ -83,11 +86,21 @@ for row_num, row in enumerate(sheet.get_all_values()[1:], start=2):
             sheet.update_cell(row_num, STATUS_COL, "募集中")
             sheet.update_cell(row_num, ENDED_COL, "")
 
-    except Exception as e:
-        print(f"[Error] Row {row_num}: {e}")
+        # ★毎回スクリーンショットを保存（GitHub Actions 確認用）
         screenshot_path = f"screenshots/row_{row_num}.png"
         driver.save_screenshot(screenshot_path)
         print(f"→ スクリーンショット保存済み: {screenshot_path}")
+
+    except Exception as e:
+        print(f"[Error] Row {row_num}: {e}")
+        screenshot_path = f"screenshots/row_{row_num}_error.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
+
     finally:
         driver.quit()
+
+# ★最後にスクリーンショット一覧を表示（アップロード確認用）
+print("screenshots フォルダ内ファイル:")
+print(os.listdir("screenshots"))
