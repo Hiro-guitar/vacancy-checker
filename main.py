@@ -100,10 +100,18 @@ try:
     print("✅ ログイン成功")
 
 except Exception as e:
-    screenshot_path = "screenshots/login_failed.png"
+    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    screenshot_path = f"screenshots/login_failed_{timestamp}.png"
+    html_path = f"screenshots/login_failed_{timestamp}.html"
+
     driver.save_screenshot(screenshot_path)
+
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(driver.page_source)
+
     print(f"❌ ログイン失敗: {e}")
-    print(f"→ スクリーンショット保存済み: {screenshot_path}")
+    print(f"→ スクリーンショット: {screenshot_path}")
+    print(f"→ HTML保存済み: {html_path}")
     driver.quit()
     exit()
 
@@ -160,10 +168,17 @@ for row_num, row in enumerate(all_rows, start=2):
             sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
-        screenshot_path = f"screenshots/row_{row_num}_error_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
+        html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
+
         driver.save_screenshot(screenshot_path)
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+
         print(f"Error: Row {row_num}: {e}")
-        print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
+        print(f"→ スクリーンショット: {screenshot_path}")
+        print(f"→ HTML保存済み: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
 
 driver.quit()
