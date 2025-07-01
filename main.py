@@ -75,26 +75,27 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ✅ ステップ1：2回目以降ログイン（checkboxを直接 true にする）
+        # ✅ ステップ1：2回目以降ログインのチェックボックスをチェック
         checkbox = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "accordion-check-2"))
         )
         driver.execute_script("arguments[0].checked = true;", checkbox)
-        time.sleep(1)  # 展開待ち
 
-        # ✅ ステップ2：ログインフォーム入力
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "email")))
+        # ✅ ステップ2：フォームが展開されてemailが表示されるまで待機
+        WebDriverWait(driver, 10).until(
+            EC.visibility_of_element_located((By.ID, "email"))
+        )
+
+        # ✅ ステップ3：ログインフォーム入力
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
 
-        # ✅ ステップ3：ログインボタン押下
+        # ✅ ステップ4：ログインボタン押下
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ✅ ステップ4：「賃貸物件」という文字が表示されるまで待機（ログイン成功判定）
+        # ✅ ステップ5：「賃貸物件」の文字を検出してログイン成功判定
         WebDriverWait(driver, 15).until(
-            EC.visibility_of_element_located(
-                (By.XPATH, "//*[contains(text(), '賃貸物件')]")
-            )
+            EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃貸物件')]"))
         )
 
     print("✅ ログイン成功")
@@ -105,7 +106,6 @@ except Exception as e:
     html_path = f"screenshots/login_failed_{timestamp}.html"
 
     driver.save_screenshot(screenshot_path)
-
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(driver.page_source)
 
