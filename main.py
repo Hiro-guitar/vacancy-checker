@@ -151,21 +151,15 @@ for row_num, row in enumerate(all_rows, start=2):
                 has_application = True
             else:
                 try:
-                    badge_elems = driver.find_elements(
+                    label_elem = driver.find_element(
                         By.XPATH,
-                        "//span[contains(@class, 'MuiBadge-badge') and not(contains(@class, 'MuiBadge-invisible'))]"
+                        "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
                     )
-                    print(f"🔍 表示バッジの数: {len(badge_elems)}")
-
-                    for badge in badge_elems:
-                        value = badge.text.strip()
-                        print(f"🔎 バッジ内容: '{value}'")
-                        if value.isdigit() and int(value) > 0:
-                            has_application = True
-                            print(f"📌 申込バッジ発見: {value}")
-                            break
+                    if label_elem:
+                        has_application = True
+                        print("📌 『申込あり』ラベルを検出しました")
                 except Exception as e:
-                    print(f"⚠️ Badge 要素の確認中にエラー: {e}")
+                    print(f"⚠️ 『申込あり』ラベル確認中にエラー: {e}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
