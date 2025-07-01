@@ -34,7 +34,7 @@ options = Options()
 options.add_argument('--headless')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--disable-blink-features=AutomationControlled')  # bot検知回避
+options.add_argument('--disable-blink-features=AutomationControlled')
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(30)
 
@@ -92,25 +92,7 @@ try:
             )
         )
 
-        print("✅ ログイン後URL:", driver.current_url)
-        print("✅ ページタイトル:", driver.title)
-
-        time.sleep(5)
-
-        print("▶️ ログイン直後に物件ページへアクセステストします")
-        driver.get(first_url)
-        time.sleep(3)
-
-        if "login" in driver.current_url or "ログイン" in driver.title:
-            print("❌ ログイン後も物件ページでログイン画面にリダイレクトされました")
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            driver.save_screenshot(f"screenshots/login_redirect_{timestamp}.png")
-            with open(f"screenshots/login_redirect_{timestamp}.html", "w", encoding='utf-8') as f:
-                f.write(driver.page_source)
-            driver.quit()
-            exit()
-        else:
-            print("✅ ログインセッションが維持され、物件ページにアクセスできました")
+        print("✅ ログイン成功")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -171,10 +153,13 @@ for row_num, row in enumerate(all_rows, start=2):
                 try:
                     badge_elems = driver.find_elements(
                         By.XPATH,
-                        "//span[contains(@class, 'MuiBadge-badge') and contains(@class, 'MuiBadge-colorPrimary')]"
+                        "//span[contains(@class, 'MuiBadge-badge') and not(contains(@class, 'MuiBadge-invisible'))]"
                     )
+                    print(f"🔍 表示バッジの数: {len(badge_elems)}")
+
                     for badge in badge_elems:
                         value = badge.text.strip()
+                        print(f"🔎 バッジ内容: '{value}'")
                         if value.isdigit() and int(value) > 0:
                             has_application = True
                             print(f"📌 申込バッジ発見: {value}")
