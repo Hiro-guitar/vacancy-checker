@@ -75,13 +75,7 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ✅ checkboxをチェック & labelクリックで展開（両方JSで実行）
-        driver.execute_script("""
-            document.getElementById('accordion-check-2').checked = true;
-            document.querySelector('label[for="accordion-check-2"]').click();
-        """)
-
-        # ✅ 展開されたフォームのemail入力欄が表示されるまで待機
+        # ✅ フォームのemail入力欄が表示されるまで待機（アコーディオン不要）
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
@@ -93,7 +87,7 @@ try:
         # ✅ ログインボタンをクリック
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ✅ ログイン成功判定：「賃貸物件」の文字を待つ
+        # ✅ ログイン成功判定：「賃貸物件」の文字を待つ（別の要素でもOK）
         WebDriverWait(driver, 15).until(
             EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃貸物件')]"))
         )
