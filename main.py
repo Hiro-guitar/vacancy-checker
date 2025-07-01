@@ -74,12 +74,23 @@ try:
 
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
 
+        # ステップ1：2回目以降ログインをクリックしてフォーム表示
+        accordion_btn = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'label[for="accordion-check-2"]'))
+        )
+        accordion_btn.click()
+        time.sleep(1)  # アニメーション表示のため少し待つ
+
+        # ステップ2：メールアドレスとパスワードを入力
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "email")))
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
+
+        # ステップ3：ログインボタンをクリック
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
+        # ログイン成功確認（物件ページが開ける状態か）
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located(
                 (By.XPATH, "//a[contains(@href, '/rent_rooms')]")
@@ -139,7 +150,7 @@ for row_num, row in enumerate(all_rows, start=2):
                 if badge_value != "0":
                     has_application = True
 
-        # 結果をスプレッドシートに反映
+        # === スプレッドシート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             if not row[ENDED_COL - 1].strip():
@@ -151,8 +162,8 @@ for row_num, row in enumerate(all_rows, start=2):
     except Exception as e:
         screenshot_path = f"screenshots/row_{row_num}_error_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         driver.save_screenshot(screenshot_path)
-        print(f"Error:  Row {row_num}: {e}")
-        print(f"→ エラー時スクリーンショット保存済み: {screenshot_path}")
+        print(f"Error: Row {row_num}: {e}")
+        print(f"→ スクリーンショット保存済み: {screenshot_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
 
 driver.quit()
