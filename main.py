@@ -34,7 +34,9 @@ options = Options()
 options.add_argument('--headless')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
+options.add_argument('--disable-blink-features=AutomationControlled')  # bot検知回避
 driver = webdriver.Chrome(options=options)
+driver.set_page_load_timeout(30)
 
 # === 最初のログイン対象URLを取得 ===
 first_url = None
@@ -49,6 +51,8 @@ if not first_url:
     print("対象物件URLが見つかりませんでした。")
     driver.quit()
     exit()
+
+print(f"🔗 最初のアクセスURL: {first_url}")
 
 # === ログイン処理 ===
 try:
@@ -75,19 +79,13 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ✅ フォームのemail入力欄が表示されるまで待機（アコーディオン不要）
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
-
-        # ✅ ログイン情報を入力
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
-
-        # ✅ ログインボタンをクリック
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ✅ ログイン成功判定：「賃貸物件」の文字を待つ（別の要素でもOK）
         WebDriverWait(driver, 15).until(
             EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃貸物件')]"))
         )
@@ -99,13 +97,17 @@ except Exception as e:
     screenshot_path = f"screenshots/login_failed_{timestamp}.png"
     html_path = f"screenshots/login_failed_{timestamp}.html"
 
-    driver.save_screenshot(screenshot_path)
-    with open(html_path, 'w', encoding='utf-8') as f:
-        f.write(driver.page_source)
+    try:
+        driver.save_screenshot(screenshot_path)
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+        print(f"❌ ログイン失敗: {e}")
+        print(f"→ スクリーンショット: {screenshot_path}")
+        print(f"→ HTML保存済み: {html_path}")
+    except Exception as ee:
+        print(f"❌ ログイン失敗（スクショ取得も失敗）: {e}")
+        print(f"⚠ HTML保存/スクショに失敗: {ee}")
 
-    print(f"❌ ログイン失敗: {e}")
-    print(f"→ スクリーンショット: {screenshot_path}")
-    print(f"→ HTML保存済み: {html_path}")
     driver.quit()
     exit()
 
@@ -114,6 +116,8 @@ for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1]
     if not url or not ("es-square.net" in url or "itandibb.com" in url):
         continue
+
+    print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
         driver.get(url)
@@ -152,7 +156,6 @@ for row_num, row in enumerate(all_rows, start=2):
                 if badge_value != "0":
                     has_application = True
 
-        # === スプレッドシート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             if not row[ENDED_COL - 1].strip():
@@ -166,11 +169,14 @@ for row_num, row in enumerate(all_rows, start=2):
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
 
-        driver.save_screenshot(screenshot_path)
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(driver.page_source)
+        try:
+            driver.save_screenshot(screenshot_path)
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(driver.page_source)
+        except Exception as ee:
+            print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
 
-        print(f"Error: Row {row_num}: {e}")
+        print(f"❌ Error: Row {row_num}: {e}")
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
