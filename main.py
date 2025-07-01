@@ -87,7 +87,7 @@ try:
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
         WebDriverWait(driver, 15).until(
-            EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'トップページ')]"))
+            EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃料')]"))
         )
 
     print("✅ ログイン成功")
