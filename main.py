@@ -75,25 +75,25 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ✅ ステップ1：2回目以降ログインのチェックボックスをチェック
-        checkbox = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "accordion-check-2"))
+        # ✅ ステップ1：ラベルをクリックしてアコーディオン展開
+        label = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'label[for="accordion-check-2"]'))
         )
-        driver.execute_script("arguments[0].checked = true;", checkbox)
+        label.click()
 
-        # ✅ ステップ2：フォームが展開されてemailが表示されるまで待機
+        # ✅ ステップ2：フォームのemailが表示されるまで待つ
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
 
-        # ✅ ステップ3：ログインフォーム入力
+        # ✅ ステップ3：ログイン情報入力
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
 
         # ✅ ステップ4：ログインボタン押下
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ✅ ステップ5：「賃貸物件」の文字を検出してログイン成功判定
+        # ✅ ステップ5：賃貸物件の文字が表示されるまで待機
         WebDriverWait(driver, 15).until(
             EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃貸物件')]"))
         )
