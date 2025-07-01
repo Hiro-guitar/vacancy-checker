@@ -56,10 +56,10 @@ print(f"🔗 最初のアクセスURL: {first_url}")
 
 # === ログイン処理 ===
 try:
-    driver.get(first_url)
-    time.sleep(2)
-
     if "es-square.net" in first_url:
+        driver.get(first_url)
+        time.sleep(2)
+
         login_btn = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
@@ -87,10 +87,31 @@ try:
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
         WebDriverWait(driver, 15).until(
-            EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃料')]"))
+            EC.presence_of_element_located(
+                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(text(), '物件登録')]")
+            )
         )
 
-    print("✅ ログイン成功")
+        print("✅ ログイン後URL:", driver.current_url)
+        print("✅ ページタイトル:", driver.title)
+
+        time.sleep(5)
+
+        # ログイン状態のまま first_url にアクセスして検証
+        print("▶️ ログイン直後に物件ページへアクセステストします")
+        driver.get(first_url)
+        time.sleep(3)
+
+        if "login" in driver.current_url or "ログイン" in driver.title:
+            print("❌ ログイン後も物件ページでログイン画面にリダイレクトされました")
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            driver.save_screenshot(f"screenshots/login_redirect_{timestamp}.png")
+            with open(f"screenshots/login_redirect_{timestamp}.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            driver.quit()
+            exit()
+        else:
+            print("✅ ログインセッションが維持され、物件ページにアクセスできました")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -148,13 +169,17 @@ for row_num, row in enumerate(all_rows, start=2):
             if error_elems:
                 has_application = True
             else:
-                badge_elem = driver.find_element(
-                    By.XPATH,
-                    "//span[contains(@class, 'MuiBadge-badge') and contains(@class, 'MuiBadge-colorPrimary')]"
-                )
-                badge_value = badge_elem.text.strip()
-                if badge_value != "0":
-                    has_application = True
+                try:
+                    badge_elem = driver.find_element(
+                        By.XPATH,
+                        "//span[contains(@class, 'MuiBadge-badge') and contains(@class, 'MuiBadge-colorPrimary')]"
+                    )
+                    badge_value = badge_elem.text.strip()
+                    print(f"📌 申込数: {badge_value}")
+                    if badge_value != "0":
+                        has_application = True
+                except Exception as e:
+                    print(f"⚠️ Badge 要素が見つかりません: {e}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
