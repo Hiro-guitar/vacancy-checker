@@ -75,25 +75,25 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ✅ ステップ1：ラベルをクリックしてアコーディオン展開
-        label = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'label[for="accordion-check-2"]'))
-        )
-        label.click()
+        # ✅ checkboxをチェック & labelクリックで展開（両方JSで実行）
+        driver.execute_script("""
+            document.getElementById('accordion-check-2').checked = true;
+            document.querySelector('label[for="accordion-check-2"]').click();
+        """)
 
-        # ✅ ステップ2：フォームのemailが表示されるまで待つ
+        # ✅ 展開されたフォームのemail入力欄が表示されるまで待機
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
 
-        # ✅ ステップ3：ログイン情報入力
+        # ✅ ログイン情報を入力
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
 
-        # ✅ ステップ4：ログインボタン押下
+        # ✅ ログインボタンをクリック
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ✅ ステップ5：賃貸物件の文字が表示されるまで待機
+        # ✅ ログイン成功判定：「賃貸物件」の文字を待つ
         WebDriverWait(driver, 15).until(
             EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), '賃貸物件')]"))
         )
@@ -115,7 +115,7 @@ except Exception as e:
     driver.quit()
     exit()
 
-# === 各物件を処理 ===
+# === 各物件URLをチェックしてステータス反映 ===
 for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1]
     if not url or not ("es-square.net" in url or "itandibb.com" in url):
