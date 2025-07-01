@@ -75,22 +75,22 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ステップ1：2回目以降ログインをクリック
-        accordion_btn = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'label[for="accordion-check-2"]'))
+        # ✅ ステップ1：2回目以降ログイン（checkboxを直接 true にする）
+        checkbox = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "accordion-check-2"))
         )
-        accordion_btn.click()
-        time.sleep(1)
+        driver.execute_script("arguments[0].checked = true;", checkbox)
+        time.sleep(1)  # 展開待ち
 
-        # ステップ2：ログインフォーム入力
+        # ✅ ステップ2：ログインフォーム入力
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "email")))
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
 
-        # ステップ3：ログインボタン押下
+        # ✅ ステップ3：ログインボタン押下
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ステップ4：「賃貸物件」という文字が表示されるまで待機（ログイン成功の証拠）
+        # ✅ ステップ4：「賃貸物件」という文字が表示されるまで待機（ログイン成功判定）
         WebDriverWait(driver, 15).until(
             EC.visibility_of_element_located(
                 (By.XPATH, "//*[contains(text(), '賃貸物件')]")
