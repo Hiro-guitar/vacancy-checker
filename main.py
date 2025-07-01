@@ -97,7 +97,6 @@ try:
 
         time.sleep(5)
 
-        # ログイン状態のまま first_url にアクセスして検証
         print("▶️ ログイン直後に物件ページへアクセステストします")
         driver.get(first_url)
         time.sleep(3)
@@ -106,7 +105,7 @@ try:
             print("❌ ログイン後も物件ページでログイン画面にリダイレクトされました")
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             driver.save_screenshot(f"screenshots/login_redirect_{timestamp}.png")
-            with open(f"screenshots/login_redirect_{timestamp}.html", "w", encoding="utf-8") as f:
+            with open(f"screenshots/login_redirect_{timestamp}.html", "w", encoding='utf-8') as f:
                 f.write(driver.page_source)
             driver.quit()
             exit()
@@ -170,16 +169,18 @@ for row_num, row in enumerate(all_rows, start=2):
                 has_application = True
             else:
                 try:
-                    badge_elem = driver.find_element(
+                    badge_elems = driver.find_elements(
                         By.XPATH,
                         "//span[contains(@class, 'MuiBadge-badge') and contains(@class, 'MuiBadge-colorPrimary')]"
                     )
-                    badge_value = badge_elem.text.strip()
-                    print(f"📌 申込数: {badge_value}")
-                    if badge_value != "0":
-                        has_application = True
+                    for badge in badge_elems:
+                        value = badge.text.strip()
+                        if value.isdigit() and int(value) > 0:
+                            has_application = True
+                            print(f"📌 申込バッジ発見: {value}")
+                            break
                 except Exception as e:
-                    print(f"⚠️ Badge 要素が見つかりません: {e}")
+                    print(f"⚠️ Badge 要素の確認中にエラー: {e}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
