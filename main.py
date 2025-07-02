@@ -40,9 +40,9 @@ driver.set_page_load_timeout(30)
 
 # === 最初のログイン対象URLを取得 ===
 first_url = None
-all_rows = sheet.get_all_values()[1:]
+all_rows = sheet.get_all_values()[1:]  # ヘッダーを除外
 for row in all_rows:
-    url = row[URL_COL - 1]
+    url = row[URL_COL - 1].strip()
     if url and ("es-square.net" in url or "itandibb.com" in url):
         first_url = url
         break
@@ -104,7 +104,7 @@ try:
             raise
 
         finally:
-            # itandiログイン後のスクショ＋HTML保存（成功／失敗関係なく）
+            # スクリーンショットとHTML保存
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             screenshot_path = f"screenshots/itandi_login_{timestamp}.png"
             html_path = f"screenshots/itandi_login_{timestamp}.html"
@@ -133,12 +133,16 @@ except Exception as e:
     driver.quit()
     exit()
 
-# === 各物件URLをチェックしてステータス反映 ===
-for row_num, row in enumerate(all_rows, start=2):
-    url = row[URL_COL - 1]
-    if not url or not ("es-square.net" in url or "itandibb.com" in url):
-        continue
+# === URLリストを事前にフィルタ ===
+target_rows = []
+for i, row in enumerate(all_rows):
+    url = row[URL_COL - 1].strip()
+    if url and ("es-square.net" in url or "itandibb.com" in url):
+        target_rows.append((i + 2, row))  # 2行目以降の行番号とデータ
 
+# === 各物件URLをチェックしてステータス反映 ===
+for row_num, row in target_rows:
+    url = row[URL_COL - 1].strip()
     print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
@@ -187,11 +191,11 @@ for row_num, row in enumerate(all_rows, start=2):
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
-            if not row[ENDED_COL - 1].strip():
-                sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+            sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
         else:
             sheet.update_cell(row_num, STATUS_COL, "募集中")
-            sheet.update_cell(row_num, ENDED_COL, "")
+            if row[ENDED_COL - 1].strip():
+                sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
