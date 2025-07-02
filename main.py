@@ -77,44 +77,58 @@ try:
         )
 
     elif "itandibb.com" in first_url:
-        driver.get("https://itandibb.com/login")
+        try:
+            driver.get("https://itandibb.com/login")
+            driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
+            time.sleep(0.5)
 
-        # ← ココ：2回目以降ログインフォームを表示させる
-        driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
-        time.sleep(0.5)
-
-        WebDriverWait(driver, 10).until(
-            EC.visibility_of_element_located((By.ID, "email"))
-        )
-        driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
-        driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
-        driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
-
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located(
-                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(@href, '/top')]")
+            WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.ID, "email"))
             )
-        )
+            driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
+            driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
+            driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        driver.get("https://itandibb.com/top")
-        time.sleep(2)
-        print("✅ ログイン成功")
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(@href, '/top')]")
+                )
+            )
+
+            driver.get("https://itandibb.com/top")
+            time.sleep(2)
+            print("✅ ログイン成功")
+
+        except Exception as e:
+            print(f"❌ itandiログイン失敗: {e}")
+            raise
+
+        finally:
+            # itandiログイン後のスクショ＋HTML保存（成功／失敗関係なく）
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/itandi_login_{timestamp}.png"
+            html_path = f"screenshots/itandi_login_{timestamp}.html"
+            try:
+                driver.save_screenshot(screenshot_path)
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+                print(f"📸 itandiログイン後に保存 → {screenshot_path}, {html_path}")
+            except Exception as ee:
+                print(f"⚠ itandiログイン後のスクショ/HTML保存失敗: {ee}")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     screenshot_path = f"screenshots/login_failed_{timestamp}.png"
     html_path = f"screenshots/login_failed_{timestamp}.html"
-
     try:
         driver.save_screenshot(screenshot_path)
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
-        print(f"❌ ログイン失敗: {e}")
+        print(f"❌ ログイン処理全体で失敗: {e}")
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
     except Exception as ee:
-        print(f"❌ ログイン失敗（スクショ取得も失敗）: {e}")
-        print(f"⚠ HTML保存/スクショに失敗: {ee}")
+        print(f"⚠ ログイン失敗時のスクショ保存も失敗: {ee}")
 
     driver.quit()
     exit()
