@@ -11,12 +11,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from zoneinfo import ZoneInfo
-from pathlib import Path
-
-# === ベースディレクトリ（スクリプトの1階層上＝リポジトリルート）
-base_dir = Path(__file__).resolve().parent.parent
-screenshot_dir = base_dir / "screenshots"
-screenshot_dir.mkdir(parents=True, exist_ok=True)
 
 # === Google Sheets 認証 ===
 json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
@@ -28,9 +22,12 @@ client = gspread.authorize(cred)
 sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
 # === 対象列インデックス ===
-URL_COL = 13
-STATUS_COL = 9
-ENDED_COL = 11
+URL_COL = 13   # M列
+STATUS_COL = 9 # I列
+ENDED_COL = 11 # K列
+
+# === スクリーンショット保存先フォルダ ===
+os.makedirs("screenshots", exist_ok=True)
 
 # === Chrome起動 ===
 options = Options()
@@ -104,31 +101,35 @@ try:
 
         except Exception as e:
             print(f"❌ itandiログイン失敗: {e}")
+            raise
+
         finally:
+            # itandiログイン後のスクショ＋HTML保存（成功／失敗関係なく）
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            screenshot_path = screenshot_dir / f"itandi_login_{timestamp}.png"
-            html_path = screenshot_dir / f"itandi_login_{timestamp}.html"
+            screenshot_path = f"screenshots/itandi_login_{timestamp}.png"
+            html_path = f"screenshots/itandi_login_{timestamp}.html"
             try:
-                driver.save_screenshot(str(screenshot_path))
+                driver.save_screenshot(screenshot_path)
                 with open(html_path, 'w', encoding='utf-8') as f:
                     f.write(driver.page_source)
-                print(f"📸 itandiログイン後に保存 → {screenshot_path.name}, {html_path.name}")
+                print(f"📸 itandiログイン後に保存 → {screenshot_path}, {html_path}")
             except Exception as ee:
-                print(f"⚠ スクショ保存失敗: {ee}")
+                print(f"⚠ itandiログイン後のスクショ/HTML保存失敗: {ee}")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    screenshot_path = screenshot_dir / f"login_failed_{timestamp}.png"
-    html_path = screenshot_dir / f"login_failed_{timestamp}.html"
+    screenshot_path = f"screenshots/login_failed_{timestamp}.png"
+    html_path = f"screenshots/login_failed_{timestamp}.html"
     try:
-        driver.save_screenshot(str(screenshot_path))
+        driver.save_screenshot(screenshot_path)
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
         print(f"❌ ログイン処理全体で失敗: {e}")
-        print(f"→ スクリーンショット: {screenshot_path.name}")
-        print(f"→ HTML保存済み: {html_path.name}")
+        print(f"→ スクリーンショット: {screenshot_path}")
+        print(f"→ HTML保存済み: {html_path}")
     except Exception as ee:
         print(f"⚠ ログイン失敗時のスクショ保存も失敗: {ee}")
+
     driver.quit()
     exit()
 
@@ -194,18 +195,19 @@ for row_num, row in enumerate(all_rows, start=2):
 
     except Exception as e:
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        screenshot_path = screenshot_dir / f"row_{row_num}_error_{timestamp}.png"
-        html_path = screenshot_dir / f"row_{row_num}_error_{timestamp}.html"
+        screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
+        html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
 
         try:
-            driver.save_screenshot(str(screenshot_path))
+            driver.save_screenshot(screenshot_path)
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
-            print(f"📸 Row {row_num} スクショ保存 → {screenshot_path.name}")
         except Exception as ee:
             print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
 
         print(f"❌ Error: Row {row_num}: {e}")
+        print(f"→ スクリーンショット: {screenshot_path}")
+        print(f"→ HTML保存済み: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
 
 driver.quit()
