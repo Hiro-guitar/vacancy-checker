@@ -79,10 +79,6 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        # ← ココ：2回目以降ログインフォームを表示させる
-        driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
-        time.sleep(0.5)
-
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
@@ -92,12 +88,13 @@ try:
 
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
-                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(@href, '/top')]")
+                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(text(), '物件登録')]")
             )
         )
 
         driver.get("https://itandibb.com/top")
         time.sleep(2)
+
         print("✅ ログイン成功")
 
 except Exception as e:
@@ -134,42 +131,34 @@ for row_num, row in enumerate(all_rows, start=2):
 
         driver.get(url)
         time.sleep(2)
+
+        # ✅ スクリーンショットとHTML保存（常に）
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        screenshot_path = f"screenshots/row_{row_num}_{timestamp}.png"
+        html_path = f"screenshots/row_{row_num}_{timestamp}.html"
+        driver.save_screenshot(screenshot_path)
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+
+        current_url = driver.current_url
+        if "/login" in current_url:
+            print(f"⚠️ Row {row_num}: ログイン画面のままです")
+            sheet.update_cell(row_num, STATUS_COL, "ログイン失敗？")
+            continue
+
         has_application = False
         now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
 
         if "es-square.net" in url:
-            application_elems = driver.find_elements(
-                By.XPATH,
-                "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
-            )
-            if application_elems:
-                has_application = True
-            else:
-                error_elems = driver.find_elements(
-                    By.XPATH,
-                    "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
-                )
-                if error_elems:
-                    has_application = True
-
+            elems = driver.find_elements(By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']")
+            has_application = bool(elems)
         elif "itandibb.com" in url:
-            error_elems = driver.find_elements(
+            elems = driver.find_elements(
                 By.XPATH,
-                "//h3[contains(text(), '404 Page not found')]"
+                "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
             )
-            if error_elems:
-                has_application = True
-            else:
-                try:
-                    label_elem = driver.find_element(
-                        By.XPATH,
-                        "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
-                    )
-                    if label_elem:
-                        has_application = True
-                        print("📌 『申込あり』ラベルを検出しました")
-                except Exception as e:
-                    print(f"⚠️ 『申込あり』ラベル確認中にエラー: {e}")
+            has_application = bool(elems)
+            print(f"✅ 判定: {'申込あり' if has_application else '募集中'}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
@@ -180,20 +169,16 @@ for row_num, row in enumerate(all_rows, start=2):
             sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
+        print(f"❌ Row {row_num} エラー: {e}")
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
-
         try:
             driver.save_screenshot(screenshot_path)
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
         except Exception as ee:
-            print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
-
-        print(f"❌ Error: Row {row_num}: {e}")
-        print(f"→ スクリーンショット: {screenshot_path}")
-        print(f"→ HTML保存済み: {html_path}")
+            print(f"⚠ スクショ保存失敗: {ee}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
 
 driver.quit()
