@@ -10,6 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from zoneinfo import ZoneInfo
 
 # === Google Sheets 認証 ===
@@ -151,15 +152,20 @@ for row_num, row in enumerate(all_rows, start=2):
                 has_application = True
             else:
                 try:
-                    label_elem = driver.find_element(
-                        By.XPATH,
-                        "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
+                    label_elem = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((
+                            By.XPATH,
+                            "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
+                        ))
                     )
-                    if label_elem:
-                        has_application = True
-                        print("📌 『申込あり』ラベルを検出しました")
+                    has_application = True
+                    print("📌 『申込あり』ラベルを検出しました")
+                except TimeoutException:
+                    has_application = False
+                    print("『申込あり』ラベルは見つかりませんでした")
                 except Exception as e:
                     print(f"⚠️ 『申込あり』ラベル確認中にエラー: {e}")
+                    has_application = False
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
