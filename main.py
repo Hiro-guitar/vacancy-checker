@@ -79,6 +79,10 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
+        # ← ココ：2回目以降ログインフォームを表示させる
+        driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
+        time.sleep(0.5)
+
         WebDriverWait(driver, 10).until(
             EC.visibility_of_element_located((By.ID, "email"))
         )
@@ -88,14 +92,12 @@ try:
 
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located(
-                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(text(), '物件登録')]")
+                (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(@href, '/top')]")
             )
         )
 
-        # ✅ セッション確立のためトップページを踏む
         driver.get("https://itandibb.com/top")
         time.sleep(2)
-
         print("✅ ログイン成功")
 
 except Exception as e:
@@ -126,7 +128,6 @@ for row_num, row in enumerate(all_rows, start=2):
     print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
-        # 念のため毎回トップページ踏んでセッション継続
         if "itandibb.com" in url:
             driver.get("https://itandibb.com/top")
             time.sleep(1)
