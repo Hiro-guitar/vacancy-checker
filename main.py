@@ -10,7 +10,6 @@ from selenium.webdriver.chrome.options import Options
 from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 from zoneinfo import ZoneInfo
 
 # === Google Sheets 認証 ===
@@ -60,6 +59,7 @@ try:
     if "es-square.net" in first_url:
         driver.get(first_url)
         time.sleep(2)
+
         login_btn = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
@@ -79,7 +79,9 @@ try:
     elif "itandibb.com" in first_url:
         driver.get("https://itandibb.com/login")
 
-        WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.ID, "email")))
+        WebDriverWait(driver, 10).until(
+            EC.visibility_of_element_located((By.ID, "email"))
+        )
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
@@ -89,19 +91,29 @@ try:
                 (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(text(), '物件登録')]")
             )
         )
+
+        # ✅ セッション確立のためトップページを踏む
+        driver.get("https://itandibb.com/top")
+        time.sleep(2)
+
         print("✅ ログイン成功")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     screenshot_path = f"screenshots/login_failed_{timestamp}.png"
     html_path = f"screenshots/login_failed_{timestamp}.html"
+
     try:
         driver.save_screenshot(screenshot_path)
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
-    except Exception as ee:
         print(f"❌ ログイン失敗: {e}")
+        print(f"→ スクリーンショット: {screenshot_path}")
+        print(f"→ HTML保存済み: {html_path}")
+    except Exception as ee:
+        print(f"❌ ログイン失敗（スクショ取得も失敗）: {e}")
         print(f"⚠ HTML保存/スクショに失敗: {ee}")
+
     driver.quit()
     exit()
 
@@ -114,6 +126,11 @@ for row_num, row in enumerate(all_rows, start=2):
     print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
+        # 念のため毎回トップページ踏んでセッション継続
+        if "itandibb.com" in url:
+            driver.get("https://itandibb.com/top")
+            time.sleep(1)
+
         driver.get(url)
         time.sleep(2)
         has_application = False
@@ -143,28 +160,15 @@ for row_num, row in enumerate(all_rows, start=2):
                 has_application = True
             else:
                 try:
-                    label_elem = WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((
-                            By.XPATH,
-                            "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(@class, 'Left') and normalize-space()='申込あり']"
-                        ))
+                    label_elem = driver.find_element(
+                        By.XPATH,
+                        "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
                     )
-                    has_application = True
-                    print("📌 『申込あり』ラベルを検出しました")
-                except TimeoutException:
-                    print("『申込あり』ラベルは見つかりませんでした（タイムアウト）")
-                    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                    screenshot_path = f"screenshots/row_{row_num}_no_label_{timestamp}.png"
-                    html_path = f"screenshots/row_{row_num}_no_label_{timestamp}.html"
-                    try:
-                        driver.save_screenshot(screenshot_path)
-                        with open(html_path, 'w', encoding='utf-8') as f:
-                            f.write(driver.page_source)
-                        print(f"📷 スクショ: {screenshot_path}")
-                        print(f"💾 HTML保存済み: {html_path}")
-                    except Exception as e:
-                        print(f"⚠ スクショ/HTML保存失敗: {e}")
-                    has_application = False
+                    if label_elem:
+                        has_application = True
+                        print("📌 『申込あり』ラベルを検出しました")
+                except Exception as e:
+                    print(f"⚠️ 『申込あり』ラベル確認中にエラー: {e}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
@@ -178,12 +182,14 @@ for row_num, row in enumerate(all_rows, start=2):
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
+
         try:
             driver.save_screenshot(screenshot_path)
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
         except Exception as ee:
             print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
+
         print(f"❌ Error: Row {row_num}: {e}")
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
