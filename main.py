@@ -52,7 +52,7 @@ if not first_url:
     driver.quit()
     exit()
 
-print(f"\U0001f517 最初のアクセスURL: {first_url}")
+print(f"🔗 最初のアクセスURL: {first_url}")
 
 # === ログイン処理 ===
 try:
@@ -87,7 +87,9 @@ try:
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
         WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/top') or contains(text(), '物件登録') or contains(text(), 'お気に入り')]")
+            EC.presence_of_element_located(
+                (By.XPATH, "//a[contains(@href, '/top') or contains(text(), '物件登録') or contains(text(), 'お気に入り')]")
+            )
         )
         print("✅ ログイン成功")
 
@@ -116,9 +118,10 @@ for row_num, row in enumerate(all_rows, start=2):
     if not url or not ("es-square.net" in url or "itandibb.com" in url):
         continue
 
-    print(f"\U0001f4c4 チェック中: Row {row_num} → {url}")
+    print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
+        # 念のためトップページアクセスしてセッション維持
         if "itandibb.com" in url:
             driver.get("https://itandibb.com/top")
             time.sleep(1)
@@ -126,7 +129,7 @@ for row_num, row in enumerate(all_rows, start=2):
         driver.get(url)
         time.sleep(2)
 
-        # 毎回スクショとHTML保存
+        # スクリーンショットとHTMLを保存
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         screenshot_path = f"screenshots/row_{row_num}_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_{timestamp}.html"
@@ -134,6 +137,7 @@ for row_num, row in enumerate(all_rows, start=2):
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
 
+        # ログイン状態チェック
         current_url = driver.current_url
         if "/login" in current_url:
             print(f"⚠️ Row {row_num}: ログイン画面のままです")
@@ -154,6 +158,7 @@ for row_num, row in enumerate(all_rows, start=2):
             has_application = bool(elems)
             print(f"✅ 判定: {'申込あり' if has_application else '募集中'}")
 
+        # スプレッドシート更新
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             if not row[ENDED_COL - 1].strip():
