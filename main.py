@@ -78,7 +78,7 @@ try:
 
     elif "itandibb.com" in first_url:
         try:
-            driver.get("https://itandibb.com/login")
+            driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code&state=cdaae2e803abca9b1c901018108b04059cf6fea2e588f24b7670faf95f66f5d9")
             driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
             time.sleep(0.5)
 
@@ -91,7 +91,7 @@ try:
 
             WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), 'お気に入り') or contains(@href, '/top')]")
+                    (By.XPATH, "//*[contains(text(), '賃料') or contains(@href, '/top')]")
                 )
             )
 
