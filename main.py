@@ -101,7 +101,6 @@ try:
 
         except Exception as e:
             print(f"❌ itandiログイン失敗: {e}")
-            raise
 
         finally:
             # itandiログイン後のスクショ＋HTML保存（成功／失敗関係なく）
