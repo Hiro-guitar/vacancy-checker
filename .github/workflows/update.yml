@@ -32,6 +32,8 @@ jobs:
           GSPREAD_JSON: ${{ secrets.GSPREAD_JSON }}
           ES_EMAIL: ${{ secrets.ES_EMAIL }}
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          ITANDI_EMAIL: ${{ secrets.ITANDI_EMAIL }}
+          ITANDI_PASSWORD: ${{ secrets.ITANDI_PASSWORD }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
 
       - name: Upload screenshots
@@ -39,4 +41,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
-          path: screenshots/**/*
+          path: screenshots
