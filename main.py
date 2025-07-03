@@ -159,6 +159,16 @@ for row_num, row in enumerate(all_rows, start=2):
             has_open = any("募集中" in elem.text for elem in status_elems)
             has_application = not has_open
 
+            # === 募集状況ページのスクリーンショット保存 ===
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/itandi_row_{row_num}_{timestamp}.png"
+            try:
+                driver.save_screenshot(screenshot_path)
+                print(f"📸 スクリーンショット保存済み: {screenshot_path}")
+            except Exception as ee:
+                print(f"⚠ Row {row_num} → スクリーンショット保存失敗: {ee}")
+
+        # === スプレッドシートに反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
