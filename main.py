@@ -43,6 +43,7 @@ options.add_argument('--headless=new')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-blink-features=AutomationControlled')
+options.add_argument('--window-size=1280,1024')  # ← 追加（PCレイアウトを保つため）
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(30)
 
