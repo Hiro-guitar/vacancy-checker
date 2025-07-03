@@ -78,7 +78,7 @@ try:
 
     elif "itandibb.com" in first_url:
         try:
-            driver.get("https://itandi-accounts.com/login")
+            driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code&state=c50be75f5ad9c69afda71ef6c6203260ea3146730faf193b795a88e048c3de93")
             driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
             time.sleep(0.5)
 
