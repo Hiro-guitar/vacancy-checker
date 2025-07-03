@@ -43,7 +43,7 @@ first_url = None
 all_rows = sheet.get_all_values()[1:]  # ヘッダーを除外
 for row in all_rows:
     url = row[URL_COL - 1].strip()
-    if url and ("es-square.net" in url or "itandibb.com" in url):
+    if url and "es-square.net" in url:
         first_url = url
         break
 
@@ -76,56 +76,7 @@ try:
             )
         )
 
-    elif "itandibb.com" in first_url:
-        try:
-            driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code&state=c50be75f5ad9c69afda71ef6c6203260ea3146730faf193b795a88e048c3de93")
-            driver.execute_script("document.getElementById('accordion-check-2').checked = true;")
-            time.sleep(0.5)
-
-            WebDriverWait(driver, 10).until(
-                EC.visibility_of_element_located((By.ID, "email"))
-            )
-            driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
-            driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
-            driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
-
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), '居住用物件') or contains(@href, '/top')]")
-                )
-            )
-
-            driver.get("https://itandibb.com/top")
-            time.sleep(2)
-            print("✅ ログイン成功")
-            
-            driver.get("https://example.com")  # 画面表示されるURLなら何でもOK
-            test_path = "screenshots/test_login_success.png"
-            result = driver.save_screenshot(test_path)
-            print(f"📸 テストスクショ保存結果: {result} → {test_path}")
-
-        except Exception as e:
-            print(f"❌ itandiログイン失敗: {e}")
-            raise
-        
-        finally:
-            # スクリーンショットとHTML保存（保存できたか確認付き）
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            screenshot_path = f"screenshots/itandi_login_{timestamp}.png"
-            html_path = f"screenshots/itandi_login_{timestamp}.html"
-            
-            try:
-                result = driver.save_screenshot(screenshot_path)
-                print(f"📸 スクリーンショット保存結果: {result} → {screenshot_path}")
-            except Exception as ss_error:
-                print(f"⚠ スクリーンショット保存失敗: {ss_error}")
-
-            try:
-                with open(html_path, 'w', encoding='utf-8') as f:
-                     f.write(driver.page_source)
-                print(f"📄 HTML保存成功 → {html_path}")
-            except Exception as html_error:
-                print(f"⚠ HTML保存失敗: {html_error}")
+        print("✅ ログイン成功")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -144,11 +95,11 @@ except Exception as e:
     driver.quit()
     exit()
 
-# === URLリストを事前にフィルタ ===
+# === URLリストを事前にフィルタ（es-square.net のみ）===
 target_rows = []
 for i, row in enumerate(all_rows):
     url = row[URL_COL - 1].strip()
-    if url and ("es-square.net" in url or "itandibb.com" in url):
+    if url and "es-square.net" in url:
         target_rows.append((i + 2, row))  # 2行目以降の行番号とデータ
 
 # === 各物件URLをチェックしてステータス反映 ===
@@ -157,49 +108,27 @@ for row_num, row in target_rows:
     print(f"📄 チェック中: Row {row_num} → {url}")
 
     try:
-        if "itandibb.com" in url:
-            driver.get("https://itandibb.com/top")
-            time.sleep(1)
-
         driver.get(url)
         time.sleep(2)
         has_application = False
         now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
 
-        if "es-square.net" in url:
-            application_elems = driver.find_elements(
-                By.XPATH,
-                "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
-            )
-            if application_elems:
-                has_application = True
-            else:
-                error_elems = driver.find_elements(
-                    By.XPATH,
-                    "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
-                )
-                if error_elems:
-                    has_application = True
-
-        elif "itandibb.com" in url:
+        # === 募集状況確認（es-square.net）===
+        application_elems = driver.find_elements(
+            By.XPATH,
+            "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
+        )
+        if application_elems:
+            has_application = True
+        else:
             error_elems = driver.find_elements(
                 By.XPATH,
-                "//h3[contains(text(), '404 Page not found')]"
+                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
             )
             if error_elems:
                 has_application = True
-            else:
-                try:
-                    label_elem = driver.find_element(
-                        By.XPATH,
-                        "//div[contains(@class, 'AvailableTypeLabel')]//div[contains(@class, 'Block') and contains(text(), '申込あり')]"
-                    )
-                    if label_elem:
-                        has_application = True
-                        print("📌 『申込あり』ラベルを検出しました")
-                except Exception as e:
-                    print(f"⚠️ 『申込あり』ラベル確認中にエラー: {e}")
 
+        # === シート更新 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
