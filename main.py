@@ -43,7 +43,7 @@ options.add_argument('--headless=new')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-blink-features=AutomationControlled')
-options.add_argument('--window-size=1280,1024')  # ← 追加（PCレイアウトを保つため）
+options.add_argument('--window-size=1280,1024')  # PCレイアウトを保つため
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(30)
 
@@ -88,22 +88,39 @@ try:
         print("✅ es-square ログイン成功")
 
     elif "itandibb.com" in first_url:
-        driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
+        def debug_save(step):
+            ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            driver.save_screenshot(f'screenshots/itandi_debug_{step}_{ts}.png')
+            with open(f'screenshots/itandi_debug_{step}_{ts}.html', 'w', encoding='utf-8') as f:
+                f.write(driver.page_source)
+            print(f"📸 {step} - URL: {driver.current_url}")
 
+        # Step 1: ログインページへアクセス
+        driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
+        debug_save("01_login_page")
+
+        # Step 2: ログインフォーム入力
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
+        time.sleep(2)
+        debug_save("02_after_login_submit")
 
+        # Step 3: トップページへのリンクをクリック
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'トップページへ')]"))
         ).click()
+        time.sleep(2)
+        debug_save("03_after_click_top")
 
+        # Step 4: itandiBBの管理画面へ遷移
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'itandibb.com/login')]"))
         ).click()
-
         WebDriverWait(driver, 15).until(EC.url_contains("/top"))
+        debug_save("04_final_top")
+
         print("✅ ITANDI ログイン成功")
 
 except Exception as e:
@@ -196,6 +213,5 @@ for row_num, row in enumerate(all_rows, start=2):
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
-
 
 driver.quit()
