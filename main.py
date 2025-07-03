@@ -43,7 +43,7 @@ first_url = None
 all_rows = sheet.get_all_values()[1:]  # ヘッダーを除外
 for row in all_rows:
     url = row[URL_COL - 1].strip()
-    if url and "es-square.net" in url:
+    if url and ("es-square.net" in url or "itandibb.com" in url):
         first_url = url
         break
 
@@ -76,7 +76,36 @@ try:
             )
         )
 
-        print("✅ ログイン成功")
+        print("✅ es-square ログイン成功")
+
+    elif "itandibb.com" in first_url:
+        # ステップ①：ログインページにアクセス
+        driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
+
+        # ステップ②：メールとパスワード入力
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
+        driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
+        driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
+
+        # ステップ③：ログインボタンをクリック
+        driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
+
+        # ステップ④：「トップページへ」をクリック
+        WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'トップページへ')]"))
+        ).click()
+
+        # ステップ⑤：「ITANDI BB」ボタンをクリック
+        WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'itandibb.com/login')]"))
+        ).click()
+
+        # ステップ⑥：ログイン完了確認（URL確認）
+        WebDriverWait(driver, 15).until(
+            EC.url_contains("/top")
+        )
+
+        print("✅ ITANDI ログイン成功")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -95,40 +124,46 @@ except Exception as e:
     driver.quit()
     exit()
 
-# === URLリストを事前にフィルタ（es-square.net のみ）===
-target_rows = []
-for i, row in enumerate(all_rows):
-    url = row[URL_COL - 1].strip()
-    if url and "es-square.net" in url:
-        target_rows.append((i + 2, row))  # 2行目以降の行番号とデータ
-
 # === 各物件URLをチェックしてステータス反映 ===
-for row_num, row in target_rows:
+for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1].strip()
+    if not url:
+        continue
+
     print(f"📄 チェック中: Row {row_num} → {url}")
+    now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
+    has_application = False
 
     try:
         driver.get(url)
         time.sleep(2)
-        has_application = False
-        now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
 
-        # === 募集状況確認（es-square.net）===
-        application_elems = driver.find_elements(
-            By.XPATH,
-            "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
-        )
-        if application_elems:
-            has_application = True
-        else:
-            error_elems = driver.find_elements(
+        if "es-square.net" in url:
+            # === 募集状況確認（es-square.net）===
+            application_elems = driver.find_elements(
                 By.XPATH,
-                "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
+                "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
             )
-            if error_elems:
+            if application_elems:
+                has_application = True
+            else:
+                error_elems = driver.find_elements(
+                    By.XPATH,
+                    "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
+                )
+                if error_elems:
+                    has_application = True
+
+        elif "itandibb.com" in url:
+            # === 募集状況確認（itandibb.com）===
+            application_elems = driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class, 'Block Left') and normalize-space()='申込あり']"
+            )
+            if application_elems:
                 has_application = True
 
-        # === シート更新 ===
+        # === ステータスをスプレッドシートに反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
