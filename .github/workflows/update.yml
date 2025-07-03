@@ -35,8 +35,8 @@ jobs:
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
 
       - name: Upload screenshots
-        if: always()  # 成功・失敗問わず必ず実行
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
-          path: screenshots
+          path: screenshots/**/*
