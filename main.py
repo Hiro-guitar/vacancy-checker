@@ -31,7 +31,7 @@ os.makedirs("screenshots", exist_ok=True)
 
 # === Chrome起動 ===
 options = Options()
-options.add_argument('--headless')
+options.add_argument('--headless=new')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-blink-features=AutomationControlled')
@@ -98,23 +98,34 @@ try:
             driver.get("https://itandibb.com/top")
             time.sleep(2)
             print("✅ ログイン成功")
+            
+            driver.get("https://example.com")  # 画面表示されるURLなら何でもOK
+            test_path = "screenshots/test_login_success.png"
+            result = driver.save_screenshot(test_path)
+            print(f"📸 テストスクショ保存結果: {result} → {test_path}")
 
         except Exception as e:
             print(f"❌ itandiログイン失敗: {e}")
             raise
-
+        
         finally:
-            # スクリーンショットとHTML保存
+            # スクリーンショットとHTML保存（保存できたか確認付き）
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             screenshot_path = f"screenshots/itandi_login_{timestamp}.png"
             html_path = f"screenshots/itandi_login_{timestamp}.html"
+            
             try:
-                driver.save_screenshot(screenshot_path)
+                result = driver.save_screenshot(screenshot_path)
+                print(f"📸 スクリーンショット保存結果: {result} → {screenshot_path}")
+            except Exception as ss_error:
+                print(f"⚠ スクリーンショット保存失敗: {ss_error}")
+
+            try:
                 with open(html_path, 'w', encoding='utf-8') as f:
-                    f.write(driver.page_source)
-                print(f"📸 itandiログイン後に保存 → {screenshot_path}, {html_path}")
-            except Exception as ee:
-                print(f"⚠ itandiログイン後のスクショ/HTML保存失敗: {ee}")
+                     f.write(driver.page_source)
+                print(f"📄 HTML保存成功 → {html_path}")
+            except Exception as html_error:
+                print(f"⚠ HTML保存失敗: {html_error}")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
