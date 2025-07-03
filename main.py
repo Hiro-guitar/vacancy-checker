@@ -87,32 +87,22 @@ try:
         print("✅ es-square ログイン成功")
 
     elif "itandibb.com" in first_url:
-        # ステップ①：ログインページにアクセス
         driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
 
-        # ステップ②：メールとパスワード入力
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
-
-        # ステップ③：ログインボタンをクリック
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
 
-        # ステップ④：「トップページへ」をクリック
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'トップページへ')]"))
         ).click()
 
-        # ステップ⑤：「ITANDI BB」ボタンをクリック
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'itandibb.com/login')]"))
         ).click()
 
-        # ステップ⑥：ログイン完了確認（URL確認）
-        WebDriverWait(driver, 15).until(
-            EC.url_contains("/top")
-        )
-
+        WebDriverWait(driver, 15).until(EC.url_contains("/top"))
         print("✅ ITANDI ログイン成功")
 
 except Exception as e:
@@ -128,7 +118,6 @@ except Exception as e:
         print(f"→ HTML保存済み: {html_path}")
     except Exception as ee:
         print(f"⚠ ログイン失敗時のスクショ保存も失敗: {ee}")
-
     driver.quit()
     exit()
 
@@ -148,7 +137,6 @@ for row_num, row in enumerate(all_rows, start=2):
         time.sleep(2)
 
         if "es-square.net" in url:
-            # === 募集状況確認（es-square.net）===
             application_elems = driver.find_elements(
                 By.XPATH,
                 "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
@@ -164,15 +152,13 @@ for row_num, row in enumerate(all_rows, start=2):
                     has_application = True
 
         elif "itandibb.com" in url:
-            # === 募集状況確認（itandibb.com）===
-            application_elems = driver.find_elements(
+            status_elems = driver.find_elements(
                 By.XPATH,
-                "//div[contains(@class, 'Block Left') and normalize-space()='申込あり']"
+                "//div[contains(@class, 'Block Left')]"
             )
-            if application_elems:
-                has_application = True
+            has_open = any("募集中" in elem.text for elem in status_elems)
+            has_application = not has_open
 
-        # === ステータスをスプレッドシートに反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
@@ -185,14 +171,12 @@ for row_num, row in enumerate(all_rows, start=2):
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
-
         try:
             driver.save_screenshot(screenshot_path)
             with open(html_path, 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
         except Exception as ee:
             print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
-
         print(f"❌ Error: Row {row_num}: {e}")
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
