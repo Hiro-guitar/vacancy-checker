@@ -11,6 +11,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from zoneinfo import ZoneInfo
+from urllib.parse import urlparse
+
+def is_valid_url(url):
+    try:
+        result = urlparse(url)
+        return result.scheme in ('http', 'https') and result.netloc != ""
+    except:
+        return False
 
 # === Google Sheets 認証 ===
 json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
@@ -43,7 +51,7 @@ first_url = None
 all_rows = sheet.get_all_values()[1:]  # ヘッダーを除外
 for row in all_rows:
     url = row[URL_COL - 1].strip()
-    if url and ("es-square.net" in url or "itandibb.com" in url):
+    if is_valid_url(url) and ("es-square.net" in url or "itandibb.com" in url):
         first_url = url
         break
 
@@ -127,7 +135,8 @@ except Exception as e:
 # === 各物件URLをチェックしてステータス反映 ===
 for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1].strip()
-    if not url:
+    if not is_valid_url(url):
+        print(f"スキップ: Row {row_num} に不正なURLが含まれています: {url}")
         continue
 
     print(f"📄 チェック中: Row {row_num} → {url}")
