@@ -128,6 +128,10 @@ for row_num, row in enumerate(all_rows, start=2):
         print(f"スキップ: Row {row_num} に不正なURLが含まれています: {url}")
         continue
 
+    if "es-square.net" not in url and "itandibb.com" not in url:
+        print(f"スキップ: Row {row_num} は対象外のURL → {url}")
+        continue
+
     print(f"📄 チェック中: Row {row_num} → {url}")
     now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
     has_application = False
@@ -191,5 +195,6 @@ for row_num, row in enumerate(all_rows, start=2):
         print(f"→ スクリーンショット: {screenshot_path}")
         print(f"→ HTML保存済み: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
+
 
 driver.quit()
