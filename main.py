@@ -90,31 +90,36 @@ try:
     elif "itandibb.com" in first_url:
         def debug_save(step):
             ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            driver.save_screenshot(f'screenshots/itandi_debug_{step}_{ts}.png')
-            with open(f'screenshots/itandi_debug_{step}_{ts}.html', 'w', encoding='utf-8') as f:
-                f.write(driver.page_source)
-            print(f"📸 {step} - URL: {driver.current_url}")
+            screenshot_path = f'screenshots/itandi_debug_{step}_{ts}.png'
+            html_path = f'screenshots/itandi_debug_{step}_{ts}.html'
+            try:
+                driver.save_screenshot(screenshot_path)
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+                print(f"📸 {step} - URL: {driver.current_url}")
+            except Exception as ee:
+                print(f"⚠ {step} - スクショ保存失敗: {ee}")
 
-        # Step 1: ログインページへアクセス
+        print("🔐 STEP 1: itandiアカウントログインページへアクセス")
         driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
         debug_save("01_login_page")
 
-        # Step 2: ログインフォーム入力
+        print("🔐 STEP 2: メール・パスワード入力")
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
         driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
         driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
-        time.sleep(2)
+        time.sleep(3)
         debug_save("02_after_login_submit")
 
-        # Step 3: トップページへのリンクをクリック
+        print("🔐 STEP 3: 『トップページへ』をクリック")
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'トップページへ')]"))
         ).click()
         time.sleep(2)
         debug_save("03_after_click_top")
 
-        # Step 4: itandiBBの管理画面へ遷移
+        print("🔐 STEP 4: itandibb.comの管理画面へ遷移")
         WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'itandibb.com/login')]"))
         ).click()
@@ -181,7 +186,6 @@ for row_num, row in enumerate(all_rows, start=2):
             has_open = any("募集中" in elem.text for elem in status_elems)
             has_application = not has_open
 
-            # === 募集状況ページのスクリーンショット保存 ===
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             screenshot_path = f"screenshots/itandi_row_{row_num}_{timestamp}.png"
             try:
@@ -190,7 +194,6 @@ for row_num, row in enumerate(all_rows, start=2):
             except Exception as ee:
                 print(f"⚠ Row {row_num} → スクリーンショット保存失敗: {ee}")
 
-        # === スプレッドシートに反映 ===
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
