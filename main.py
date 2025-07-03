@@ -91,7 +91,7 @@ try:
 
             WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//*[contains(text(), '賃料') or contains(@href, '/top')]")
+                    (By.XPATH, "//*[contains(text(), '居住用物件') or contains(@href, '/top')]")
                 )
             )
 
