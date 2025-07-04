@@ -127,13 +127,16 @@ for row_num, row in enumerate(all_rows, start=2):
         print(f"⚠ Row {row_num} → 無効なURL: {url}")
         continue
 
-    # ✅ itandi / es-square 以外は無視
     if not ("es-square.net" in url or "itandibb.com" in url):
         print(f"⏭️ Row {row_num} → 対象外URLスキップ: {url}")
         continue
 
     now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
     has_application = False
+
+    # 現在のシートのステータスと終了日（I列・K列）を取得
+    current_status = row[STATUS_COL - 1].strip()
+    current_date = row[ENDED_COL - 1].strip()
 
     try:
         if "es-square.net" in url and es_logged_in:
@@ -163,15 +166,20 @@ for row_num, row in enumerate(all_rows, start=2):
             itandi_driver.save_screenshot(screenshot_path)
             print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
 
+        # === ステータスと日付更新ロジック ===
         if has_application:
+            # ステータスを「申込あり」（=空）に変更
             sheet.update_cell(row_num, STATUS_COL, "")
-            #current_date = sheet.cell(row_num, ENDED_COL).value
-        #if not current_date or current_date.strip() == "":
-            # K列が空なら更新する
-            sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+            # 申込日がまだ書かれていない場合のみ記録する
+            if current_status != "":
+                sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+            else:
+                print(f"🔁 Row {row_num} → すでに申込あり、日付維持")
         else:
+            # ステータスを「募集中」に変更
             sheet.update_cell(row_num, STATUS_COL, "募集中")
-            if row[ENDED_COL - 1].strip():
+            # 日付が入っているなら消す
+            if current_date != "":
                 sheet.update_cell(row_num, ENDED_COL, "")
 
     except Exception as e:
