@@ -44,7 +44,7 @@ os.makedirs("screenshots", exist_ok=True)
 
 # === Chrome起動 ===
 options = Options()
-#options.add_argument('--headless=new')  # 必要なら有効化
+options.add_argument('--headless=new')  # 必要なら有効化
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-blink-features=AutomationControlled')
