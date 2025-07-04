@@ -21,7 +21,12 @@ def is_valid_url(url):
         return False
 
 # === Google Sheets 認証 ===
-json_str = base64.b64decode(os.environ['GSPREAD_JSON']).decode('utf-8')
+gspread_raw = os.environ["GSPREAD_JSON"]
+if gspread_raw.strip().startswith('{'):
+    json_str = gspread_raw
+else:
+    json_str = base64.b64decode(gspread_raw).decode('utf-8')
+
 cred = ServiceAccountCredentials.from_json_keyfile_dict(
     json.loads(json_str),
     ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -39,17 +44,17 @@ os.makedirs("screenshots", exist_ok=True)
 
 # === Chrome起動 ===
 options = Options()
-#options.add_argument('--headless=new')
+#options.add_argument('--headless=new')  # 必要なら有効化
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-blink-features=AutomationControlled')
-options.add_argument('--window-size=1280,1024')  # PCレイアウトを保つため
+options.add_argument('--window-size=1280,1024')
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(30)
 
 # === 最初のログイン対象URLを取得 ===
 first_url = None
-all_rows = sheet.get_all_values()[1:]  # ヘッダーを除外
+all_rows = sheet.get_all_values()[1:]  # ヘッダー除く
 for row in all_rows:
     url = row[URL_COL - 1].strip()
     if is_valid_url(url) and ("es-square.net" in url or "itandibb.com" in url):
@@ -68,23 +73,19 @@ try:
     if "es-square.net" in first_url:
         driver.get(first_url)
         time.sleep(2)
-
         login_btn = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))
         )
         login_btn.click()
-
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.NAME, "username")))
         driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
-
         WebDriverWait(driver, 30).until(
             EC.visibility_of_element_located(
                 (By.XPATH, "//*[contains(text(), '物件概要') or contains(text(), 'エラーコード：404')]")
             )
         )
-
         print("✅ es-square ログイン成功")
 
     elif "itandibb.com" in first_url:
@@ -100,33 +101,52 @@ try:
             except Exception as ee:
                 print(f"⚠ {step} - スクショ保存失敗: {ee}")
 
-        print("🔐 STEP 1: itandiアカウントログインページへアクセス")
-        driver.get("https://itandi-accounts.com/login?client_id=itandi_bb&redirect_uri=https%3A%2F%2Fitandibb.com%2Fitandi_accounts_callback&response_type=code")
-        debug_save("01_login_page")
+        print(f"🔐 STEP 1: {first_url} にアクセス")
+        driver.get(first_url)
+        debug_save("01_first_url_page")
 
-        print("🔐 STEP 2: メール・パスワード入力")
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "email")))
-        driver.find_element(By.ID, "email").send_keys(os.environ["ITANDI_EMAIL"])
-        driver.find_element(By.ID, "password").send_keys(os.environ["ITANDI_PASSWORD"])
-        driver.find_element(By.XPATH, "//input[@type='submit' and @value='ログイン']").click()
+        print("🔐 STEP 2: メール・パスワード入力（visible要素に限定）")
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="email"]'))
+        )
+
+        # JavaScriptでvisibleな要素に値を入力
+        driver.execute_script("""
+        const emailInput = Array.from(document.querySelectorAll('input[name="email"]')).find(el => el.offsetParent !== null);
+        const passwordInput = Array.from(document.querySelectorAll('input[name="password"]')).find(el => el.offsetParent !== null);
+
+        if (emailInput && passwordInput) {
+            emailInput.focus();
+            emailInput.value = arguments[0];
+            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+            passwordInput.focus();
+            passwordInput.value = arguments[1];
+            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        """, os.environ["ITANDI_EMAIL"], os.environ["ITANDI_PASSWORD"])
+
+        time.sleep(1)
+
+        print("🔐 STEP 3: ログインボタンクリック")
+        login_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="submit"][value="ログイン"]'))
+        )
+        login_btn.click()
         time.sleep(3)
         debug_save("02_after_login_submit")
 
-        print("🔐 STEP 3: 『トップページへ』をクリック")
-        WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'トップページへ')]"))
-        ).click()
-        time.sleep(2)
-        debug_save("03_after_click_top")
+        print("🔐 STEP 4: ログイン成功判定")
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//div[contains(@class, 'DetailTitleLabel')]//span[text()='設備・詳細']")
+                )
+            )
+            print("✅ ITANDI ログイン成功")
+        except:
+            print("❌ ログイン成功判定に失敗しました")
 
-        print("🔐 STEP 4: itandibb.comの管理画面へ遷移")
-        WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'itandibb.com/login')]"))
-        ).click()
-        WebDriverWait(driver, 15).until(EC.url_contains("/top"))
-        debug_save("04_final_top")
-
-        print("✅ ITANDI ログイン成功")
 
 except Exception as e:
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -136,23 +156,22 @@ except Exception as e:
         driver.save_screenshot(screenshot_path)
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
-        print(f"❌ ログイン処理全体で失敗: {e}")
-        print(f"→ スクリーンショット: {screenshot_path}")
-        print(f"→ HTML保存済み: {html_path}")
+        print(f"❌ ログイン失敗: {e}")
+        print(f"→ スクショ: {screenshot_path}")
+        print(f"→ HTML: {html_path}")
     except Exception as ee:
-        print(f"⚠ ログイン失敗時のスクショ保存も失敗: {ee}")
+        print(f"⚠ ログイン時のスクショ保存も失敗: {ee}")
     driver.quit()
     exit()
 
-# === 各物件URLをチェックしてステータス反映 ===
+# === 各物件URLのステータス確認 ===
 for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1].strip()
     if not is_valid_url(url):
-        print(f"スキップ: Row {row_num} に不正なURLが含まれています: {url}")
+        print(f"スキップ: Row {row_num} → 不正なURL: {url}")
         continue
-
     if "es-square.net" not in url and "itandibb.com" not in url:
-        print(f"スキップ: Row {row_num} は対象外のURL → {url}")
+        print(f"スキップ: Row {row_num} → 対象外URL: {url}")
         continue
 
     print(f"📄 チェック中: Row {row_num} → {url}")
@@ -165,34 +184,26 @@ for row_num, row in enumerate(all_rows, start=2):
 
         if "es-square.net" in url:
             application_elems = driver.find_elements(
-                By.XPATH,
-                "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
+                By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
             )
             if application_elems:
                 has_application = True
             else:
                 error_elems = driver.find_elements(
-                    By.XPATH,
-                    "//div[contains(@class,'ErrorAnnounce-module_eds-error-announce__note') and contains(normalize-space(), 'エラーコード：404')]"
+                    By.XPATH, "//div[contains(@class,'ErrorAnnounce') and contains(text(), 'エラーコード：404')]"
                 )
                 if error_elems:
                     has_application = True
 
         elif "itandibb.com" in url:
-            status_elems = driver.find_elements(
-                By.XPATH,
-                "//div[contains(@class, 'Block Left')]"
-            )
+            status_elems = driver.find_elements(By.XPATH, "//div[contains(@class, 'Block Left')]")
             has_open = any("募集中" in elem.text for elem in status_elems)
             has_application = not has_open
 
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             screenshot_path = f"screenshots/itandi_row_{row_num}_{timestamp}.png"
-            try:
-                driver.save_screenshot(screenshot_path)
-                print(f"📸 スクリーンショット保存済み: {screenshot_path}")
-            except Exception as ee:
-                print(f"⚠ Row {row_num} → スクリーンショット保存失敗: {ee}")
+            driver.save_screenshot(screenshot_path)
+            print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
 
         if has_application:
             sheet.update_cell(row_num, STATUS_COL, "")
@@ -212,9 +223,9 @@ for row_num, row in enumerate(all_rows, start=2):
                 f.write(driver.page_source)
         except Exception as ee:
             print(f"⚠ Row {row_num} → スクショ保存失敗: {ee}")
-        print(f"❌ Error: Row {row_num}: {e}")
-        print(f"→ スクリーンショット: {screenshot_path}")
-        print(f"→ HTML保存済み: {html_path}")
+        print(f"❌ Row {row_num} → エラー: {e}")
+        print(f"→ スクショ: {screenshot_path}")
+        print(f"→ HTML: {html_path}")
         sheet.update_cell(row_num, STATUS_COL, "取得失敗")
 
 driver.quit()
