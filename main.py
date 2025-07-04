@@ -164,8 +164,8 @@ for row_num, row in enumerate(all_rows, start=2):
             print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
 
         if has_application:
-        sheet.update_cell(row_num, STATUS_COL, "")
-        current_date = sheet.cell(row_num, ENDED_COL).value
+            sheet.update_cell(row_num, STATUS_COL, "")
+            current_date = sheet.cell(row_num, ENDED_COL).value
         if not current_date or current_date.strip() == "":
             # K列が空なら更新する
             sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
