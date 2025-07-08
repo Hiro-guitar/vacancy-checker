@@ -34,6 +34,8 @@ jobs:
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
           ITANDI_EMAIL: ${{ secrets.ITANDI_EMAIL }}
           ITANDI_PASSWORD: ${{ secrets.ITANDI_PASSWORD }}
+          IELOVE_ID: ${{ secrets.IELOVE_ID }}            
+          IELOVE_PASSWORD: ${{ secrets.IELOVE_PASSWORD }}  
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
 
       - name: Upload screenshots
