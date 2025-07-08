@@ -198,9 +198,9 @@ def check_ielove(driver, url, row_num):
 
 # === 順番に実行 ===
 for target in [
+    ("bb.ielove.jp", login_ielove, check_ielove),
     ("es-square.net", login_es, check_es),
-    ("itandibb.com", login_itandi, check_itandi),
-    ("bb.ielove.jp", login_ielove, check_ielove)
+    ("itandibb.com", login_itandi, check_itandi)
 ]:
     driver = create_driver()
     process_rows(driver, target[1], target[0], target[2])
