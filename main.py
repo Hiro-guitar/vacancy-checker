@@ -22,20 +22,18 @@ def is_valid_url(url):
 
 def create_driver():
     options = Options()
-    #options.add_argument('--headless=new')  # 必要に応じて外す
+    options.add_argument('--headless=new')  # ✅ Headlessモードを明示
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--window-size=1280,1024')
     return webdriver.Chrome(options=options)
 
-# === スクリーンショット保存先フォルダ ===
+# === 初期準備 ===
 os.makedirs("screenshots", exist_ok=True)
 
-# === Google Sheets 認証 ===
 gspread_raw = os.environ["GSPREAD_JSON"]
 json_str = gspread_raw if gspread_raw.strip().startswith('{') else base64.b64decode(gspread_raw).decode('utf-8')
-
 cred = ServiceAccountCredentials.from_json_keyfile_dict(
     json.loads(json_str),
     ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -43,24 +41,59 @@ cred = ServiceAccountCredentials.from_json_keyfile_dict(
 client = gspread.authorize(cred)
 sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
-URL_COL = 13   # M列
-STATUS_COL = 9 # I列
-ENDED_COL = 11 # K列
-
+URL_COL = 13
+STATUS_COL = 9
+ENDED_COL = 11
 all_rows = sheet.get_all_values()[1:]
 
-# === ドライバの初期化 ===
-es_driver = create_driver()
-itandi_driver = create_driver()
-ielove_driver = create_driver()
+# === 共通処理 ===
+def process_rows(driver, login_func, url_keyword, checker_func):
+    print(f"🔍 {url_keyword} の処理を開始します")
+    logged_in = login_func(driver)
+    if not logged_in:
+        print(f"❌ {url_keyword} のログインに失敗したためスキップします")
+        return
 
-es_logged_in = False
-itandi_logged_in = False
-ielove_logged_in = False
+    for row_num, row in enumerate(all_rows, start=2):
+        url = row[URL_COL - 1].strip()
+        if url_keyword not in url or not is_valid_url(url):
+            continue
 
-# === ログイン処理 ===
+        now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
+        current_status = row[STATUS_COL - 1].strip()
+        current_date = row[ENDED_COL - 1].strip()
+        has_application = False
+
+        try:
+            has_application = checker_func(driver, url, row_num)
+
+            if has_application:
+                sheet.update_cell(row_num, STATUS_COL, "")
+                if current_status != "":
+                    sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+                else:
+                    print(f"🔁 Row {row_num} → すでに申込あり、日付維持")
+            else:
+                sheet.update_cell(row_num, STATUS_COL, "募集中")
+                if current_date != "":
+                    sheet.update_cell(row_num, ENDED_COL, "")
+
+        except Exception as e:
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
+            html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
+            try:
+                driver.save_screenshot(screenshot_path)
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+            except Exception as ee:
+                print(f"⚠ Row {row_num} スクショ保存失敗: {ee}")
+            print(f"❌ Row {row_num} エラー: {e}")
+            print(f"→ スクショ: {screenshot_path}")
+
+# === 各ログイン関数・チェック関数 ===
+
 def login_es(driver):
-    print("🔐 ESログイン処理")
     for row in all_rows:
         url = row[URL_COL - 1].strip()
         if "es-square.net" in url:
@@ -79,16 +112,19 @@ def login_es(driver):
                 return False
     return False
 
+def check_es(driver, url, row_num):
+    driver.get(url)
+    time.sleep(2)
+    elems = driver.find_elements(By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']")
+    return bool(elems) or bool(driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]"))
+
 def login_itandi(driver):
-    print("🔐 ITANDIログイン処理")
     for row in all_rows:
         url = row[URL_COL - 1].strip()
         if "itandibb.com" in url:
             driver.get(url)
             try:
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="email"]'))
-                )
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="email"]')))
                 driver.execute_script("""
                 const emailInput = Array.from(document.querySelectorAll('input[name="email"]')).find(el => el.offsetParent !== null);
                 const passwordInput = Array.from(document.querySelectorAll('input[name="password"]')).find(el => el.offsetParent !== null);
@@ -108,13 +144,8 @@ def login_itandi(driver):
                     triggerInputEvents(passwordInput, arguments[1]);
                 }
                 """, os.environ["ITANDI_EMAIL"], os.environ["ITANDI_PASSWORD"])
-                itandi_login_btn = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="submit"][value="ログイン"]'))
-                )
-                itandi_login_btn.click()
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'DetailTitleLabel')]//span[text()='設備・詳細']"))
-                )
+                WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="submit"][value="ログイン"]'))).click()
+                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//span[text()='設備・詳細']")))
                 print("✅ ITANDIログイン成功")
                 return True
             except Exception as e:
@@ -122,139 +153,266 @@ def login_itandi(driver):
                 return False
     return False
 
+def check_itandi(driver, url, row_num):
+    driver.get(url)
+    time.sleep(2)
+    elems = driver.find_elements(By.XPATH, "//div[contains(@class, 'Block Left')]")
+    has_open = any("募集中" in elem.text for elem in elems)
+    screenshot_path = f"screenshots/itandi_row_{row_num}.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 ITANDI Row {row_num} スクリーンショット: {screenshot_path}")
+    return not has_open
+
 def login_ielove(driver):
-    print("🔐 IELBBログイン処理")
     try:
         driver.get("https://bb.ielove.jp/ielovebb/login/login/")
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "_4407f7df050aca29f5b0c2592fb48e60"))
-        )
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "_4407f7df050aca29f5b0c2592fb48e60")))
         driver.find_element(By.ID, "_4407f7df050aca29f5b0c2592fb48e60").send_keys(os.environ["IELOVE_ID"])
         driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
         driver.find_element(By.ID, "loginButton").click()
-
-        # デバッグ用スクショ
-        time.sleep(3)
-        driver.save_screenshot("screenshots/ielove_login_debug.png")
-
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.savedSearch__title"))
-        )
+        time.sleep(2)
         print("✅ IELBBログイン成功")
         return True
     except Exception as e:
         print(f"❌ IELBBログイン失敗: {e}")
         return False
-        
-# ログイン実行
-es_logged_in = login_es(es_driver)
-itandi_logged_in = login_itandi(itandi_driver)
-ielove_logged_in = login_ielove(ielove_driver)
 
-# === 各物件URLのステータス確認 ===
-for row_num, row in enumerate(all_rows, start=2):
-    url = row[URL_COL - 1].strip()
-    if not is_valid_url(url):
-        print(f"⚠ Row {row_num} → 無効なURL: {url}")
-        continue
+def check_ielove(driver, url, row_num):
+    driver.get(url)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "table.mar-top-12.detail-info.leasing-detail-info"))
+    )
+    time.sleep(1)
+    app_elems = driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm")
+    rent_elems = driver.find_elements(By.CSS_SELECTOR, "span.for-rent")
+    screenshot_path = f"screenshots/ielove_row_{row_num}.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 IELBB Row {row_num} スクリーンショット: {screenshot_path}")
+    if app_elems:
+        return True
+    elif rent_elems:
+        return False
+    else:
+        print(f"⚠ Row {row_num} IELBB → 判定不能")
+        return True
 
-    now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
-    has_application = False
+# === 順番に実行 ===
+for target in [
+    ("es-square.net", login_es, check_es),
+    ("itandibb.com", login_itandi, check_itandi),
+    ("bb.ielove.jp", login_ielove, check_ielove)
+]:
+    driver = create_driver()
+    process_rows(driver, target[1], target[0], target[2])
+    driver.quit()
 
-    # 現在のシートのステータスと終了日（I列・K列）を取得
-    current_status = row[STATUS_COL - 1].strip()
-    current_date = row[ENDED_COL - 1].strip()
+print("✅ 全処理完了")
+import os
+import json
+import base64
+import time
+import datetime
+import gspread
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from oauth2client.service_account import ServiceAccountCredentials
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from zoneinfo import ZoneInfo
+from urllib.parse import urlparse
 
+def is_valid_url(url):
     try:
-        if "es-square.net" in url and es_logged_in:
-            es_driver.get(url)
-            time.sleep(2)
-            application_elems = es_driver.find_elements(
-                By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']"
-            )
-            if application_elems:
-                has_application = True
-            else:
-                error_elems = es_driver.find_elements(
-                    By.XPATH, "//div[contains(@class,'ErrorAnnounce') and contains(text(), 'エラーコード：404')]"
-                )
-                if error_elems:
-                    has_application = True
+        result = urlparse(url)
+        return result.scheme in ('http', 'https') and result.netloc != ""
+    except:
+        return False
 
-        elif "itandibb.com" in url and itandi_logged_in:
-            itandi_driver.get(url)
-            time.sleep(2)
-            status_elems = itandi_driver.find_elements(By.XPATH, "//div[contains(@class, 'Block Left')]")
-            has_open = any("募集中" in elem.text for elem in status_elems)
-            has_application = not has_open
+def create_driver():
+    options = Options()
+    options.add_argument('--headless=new')  # ✅ Headlessモードを明示
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--window-size=1280,1024')
+    return webdriver.Chrome(options=options)
 
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            screenshot_path = f"screenshots/itandi_row_{row_num}_{timestamp}.png"
-            itandi_driver.save_screenshot(screenshot_path)
-            print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
+# === 初期準備 ===
+os.makedirs("screenshots", exist_ok=True)
 
-        elif "bb.ielove.jp" in url and ielove_logged_in:
-            ielove_driver.get(url)
-            WebDriverWait(ielove_driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.mar-top-12.detail-info.leasing-detail-info"))
-            )
-            time.sleep(1)
+gspread_raw = os.environ["GSPREAD_JSON"]
+json_str = gspread_raw if gspread_raw.strip().startswith('{') else base64.b64decode(gspread_raw).decode('utf-8')
+cred = ServiceAccountCredentials.from_json_keyfile_dict(
+    json.loads(json_str),
+    ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+)
+client = gspread.authorize(cred)
+sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 
-            app_elems = ielove_driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm")
-            rent_elems = ielove_driver.find_elements(By.CSS_SELECTOR, "span.for-rent")
+URL_COL = 13
+STATUS_COL = 9
+ENDED_COL = 11
+all_rows = sheet.get_all_values()[1:]
 
-            if app_elems:
-                has_application = True
-            elif rent_elems:
-                has_application = False
-            else:
-                print(f"⚠ Row {row_num} IELBB → 募集状況の判定ができませんでした")
-                has_application = True
+# === 共通処理 ===
+def process_rows(driver, login_func, url_keyword, checker_func):
+    print(f"🔍 {url_keyword} の処理を開始します")
+    logged_in = login_func(driver)
+    if not logged_in:
+        print(f"❌ {url_keyword} のログインに失敗したためスキップします")
+        return
 
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            screenshot_path = f"screenshots/ielove_row_{row_num}_{timestamp}.png"
-            ielove_driver.save_screenshot(screenshot_path)
-            print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
-
-        else:
-            print(f"⏭️ Row {row_num} → 対象外URLまたは未ログインのためスキップ: {url}")
+    for row_num, row in enumerate(all_rows, start=2):
+        url = row[URL_COL - 1].strip()
+        if url_keyword not in url or not is_valid_url(url):
             continue
 
-        # === ステータスと日付更新ロジック ===
-        if has_application:
-            sheet.update_cell(row_num, STATUS_COL, "")
-            if current_status != "":
-                sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
-            else:
-                print(f"🔁 Row {row_num} → すでに申込あり、日付維持")
-        else:
-            sheet.update_cell(row_num, STATUS_COL, "募集中")
-            if current_date != "":
-                sheet.update_cell(row_num, ENDED_COL, "")
+        now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
+        current_status = row[STATUS_COL - 1].strip()
+        current_date = row[ENDED_COL - 1].strip()
+        has_application = False
 
-    except Exception as e:
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
-        html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
         try:
-            driver = None
-            if "es-square.net" in url:
-                driver = es_driver
-            elif "itandibb.com" in url:
-                driver = itandi_driver
-            elif "bb.ielove.jp" in url:
-                driver = ielove_driver
-            if driver:
+            has_application = checker_func(driver, url, row_num)
+
+            if has_application:
+                sheet.update_cell(row_num, STATUS_COL, "")
+                if current_status != "":
+                    sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
+                else:
+                    print(f"🔁 Row {row_num} → すでに申込あり、日付維持")
+            else:
+                sheet.update_cell(row_num, STATUS_COL, "募集中")
+                if current_date != "":
+                    sheet.update_cell(row_num, ENDED_COL, "")
+
+        except Exception as e:
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
+            html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
+            try:
                 driver.save_screenshot(screenshot_path)
                 with open(html_path, 'w', encoding='utf-8') as f:
                     f.write(driver.page_source)
-        except Exception as ee:
-            print(f"⚠ Row {row_num} スクショ保存失敗: {ee}")
-        print(f"❌ Row {row_num} エラー: {e}")
-        print(f"→ スクショ: {screenshot_path}")
+            except Exception as ee:
+                print(f"⚠ Row {row_num} スクショ保存失敗: {ee}")
+            print(f"❌ Row {row_num} エラー: {e}")
+            print(f"→ スクショ: {screenshot_path}")
 
-# === 終了処理 ===
-es_driver.quit()
-itandi_driver.quit()
-ielove_driver.quit()
+# === 各ログイン関数・チェック関数 ===
+
+def login_es(driver):
+    for row in all_rows:
+        url = row[URL_COL - 1].strip()
+        if "es-square.net" in url:
+            driver.get(url)
+            try:
+                WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))).click()
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
+                driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
+                driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
+                driver.find_element(By.XPATH, "//button[@type='submit']").click()
+                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '物件概要')]")))
+                print("✅ ESログイン成功")
+                return True
+            except Exception as e:
+                print(f"❌ ESログイン失敗: {e}")
+                return False
+    return False
+
+def check_es(driver, url, row_num):
+    driver.get(url)
+    time.sleep(2)
+    elems = driver.find_elements(By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']")
+    return bool(elems) or bool(driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]"))
+
+def login_itandi(driver):
+    for row in all_rows:
+        url = row[URL_COL - 1].strip()
+        if "itandibb.com" in url:
+            driver.get(url)
+            try:
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="email"]')))
+                driver.execute_script("""
+                const emailInput = Array.from(document.querySelectorAll('input[name="email"]')).find(el => el.offsetParent !== null);
+                const passwordInput = Array.from(document.querySelectorAll('input[name="password"]')).find(el => el.offsetParent !== null);
+                function triggerInputEvents(element, value) {
+                    const lastValue = element.value;
+                    element.focus();
+                    element.value = value;
+                    const inputEvent = new Event('input', { bubbles: true });
+                    const changeEvent = new Event('change', { bubbles: true });
+                    const tracker = element._valueTracker;
+                    if (tracker) tracker.setValue(lastValue);
+                    element.dispatchEvent(inputEvent);
+                    element.dispatchEvent(changeEvent);
+                }
+                if (emailInput && passwordInput) {
+                    triggerInputEvents(emailInput, arguments[0]);
+                    triggerInputEvents(passwordInput, arguments[1]);
+                }
+                """, os.environ["ITANDI_EMAIL"], os.environ["ITANDI_PASSWORD"])
+                WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="submit"][value="ログイン"]'))).click()
+                WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//span[text()='設備・詳細']")))
+                print("✅ ITANDIログイン成功")
+                return True
+            except Exception as e:
+                print(f"❌ ITANDIログイン失敗: {e}")
+                return False
+    return False
+
+def check_itandi(driver, url, row_num):
+    driver.get(url)
+    time.sleep(2)
+    elems = driver.find_elements(By.XPATH, "//div[contains(@class, 'Block Left')]")
+    has_open = any("募集中" in elem.text for elem in elems)
+    screenshot_path = f"screenshots/itandi_row_{row_num}.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 ITANDI Row {row_num} スクリーンショット: {screenshot_path}")
+    return not has_open
+
+def login_ielove(driver):
+    try:
+        driver.get("https://bb.ielove.jp/ielovebb/login/login/")
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "_4407f7df050aca29f5b0c2592fb48e60")))
+        driver.find_element(By.ID, "_4407f7df050aca29f5b0c2592fb48e60").send_keys(os.environ["IELOVE_ID"])
+        driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
+        driver.find_element(By.ID, "loginButton").click()
+        time.sleep(2)
+        print("✅ IELBBログイン成功")
+        return True
+    except Exception as e:
+        print(f"❌ IELBBログイン失敗: {e}")
+        return False
+
+def check_ielove(driver, url, row_num):
+    driver.get(url)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "table.mar-top-12.detail-info.leasing-detail-info"))
+    )
+    time.sleep(1)
+    app_elems = driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm")
+    rent_elems = driver.find_elements(By.CSS_SELECTOR, "span.for-rent")
+    screenshot_path = f"screenshots/ielove_row_{row_num}.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 IELBB Row {row_num} スクリーンショット: {screenshot_path}")
+    if app_elems:
+        return True
+    elif rent_elems:
+        return False
+    else:
+        print(f"⚠ Row {row_num} IELBB → 判定不能")
+        return True
+
+# === 順番に実行 ===
+for target in [
+    ("es-square.net", login_es, check_es),
+    ("itandibb.com", login_itandi, check_itandi),
+    ("bb.ielove.jp", login_ielove, check_ielove)
+]:
+    driver = create_driver()
+    process_rows(driver, target[1], target[0], target[2])
+    driver.quit()
+
 print("✅ 全処理完了")
