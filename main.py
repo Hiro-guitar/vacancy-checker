@@ -22,7 +22,7 @@ def is_valid_url(url):
 
 def create_driver():
     options = Options()
-    options.add_argument('--headless=new')  # 必要に応じて
+    options.add_argument('--headless=new')  # 必要に応じて外す
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-blink-features=AutomationControlled')
@@ -52,6 +52,11 @@ all_rows = sheet.get_all_values()[1:]
 # === ドライバの初期化 ===
 es_driver = create_driver()
 itandi_driver = create_driver()
+ielove_driver = create_driver()
+
+es_logged_in = False
+itandi_logged_in = False
+ielove_logged_in = False
 
 # === ログイン処理 ===
 def login_es(driver):
@@ -117,18 +122,37 @@ def login_itandi(driver):
                 return False
     return False
 
+def login_ielove(driver):
+    print("🔐 IELBBログイン処理")
+    try:
+        driver.get("https://bb.ielove.jp/ielovebb/login/login/")
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "_4407f7df050aca29f5b0c2592fb48e60"))
+        )
+        driver.find_element(By.ID, "_4407f7df050aca29f5b0c2592fb48e60").send_keys(os.environ["IELOVE_ID"])
+        driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
+        driver.find_element(By.ID, "loginButton").click()
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//title[contains(text(), '物件詳細')]"))
+        )
+        print("✅ IELBBログイン成功")
+        return True
+    except Exception as e:
+        print(f"❌ IELBBログイン失敗: {e}")
+        return False
+
+# ログイン実行
 es_logged_in = login_es(es_driver)
 itandi_logged_in = login_itandi(itandi_driver)
+
+# いえらぶBBは初回でログインのみ行い、以降はログイン状態を維持
+ielove_logged_in = login_ielove(ielove_driver)
 
 # === 各物件URLのステータス確認 ===
 for row_num, row in enumerate(all_rows, start=2):
     url = row[URL_COL - 1].strip()
     if not is_valid_url(url):
         print(f"⚠ Row {row_num} → 無効なURL: {url}")
-        continue
-
-    if not ("es-square.net" in url or "itandibb.com" in url):
-        print(f"⏭️ Row {row_num} → 対象外URLスキップ: {url}")
         continue
 
     now_jst = datetime.datetime.now(ZoneInfo("Asia/Tokyo"))
@@ -166,6 +190,27 @@ for row_num, row in enumerate(all_rows, start=2):
             itandi_driver.save_screenshot(screenshot_path)
             print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
 
+        elif "bb.ielove.jp" in url and ielove_logged_in:
+            ielove_driver.get(url)
+            time.sleep(2)
+
+            if ielove_driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm"):
+                has_application = True
+            elif ielove_driver.find_elements(By.CSS_SELECTOR, "span.for-rent"):
+                has_application = False
+            else:
+                print(f"⚠ Row {row_num} IELBB → 募集状況の判定ができませんでした")
+                has_application = True  # 念のため申込あり扱い
+
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/ielove_row_{row_num}_{timestamp}.png"
+            ielove_driver.save_screenshot(screenshot_path)
+            print(f"📸 Row {row_num} スクリーンショット保存: {screenshot_path}")
+
+        else:
+            print(f"⏭️ Row {row_num} → 対象外URLまたは未ログインのためスキップ: {url}")
+            continue
+
         # === ステータスと日付更新ロジック ===
         if has_application:
             # ステータスを「申込あり」（=空）に変更
@@ -187,10 +232,17 @@ for row_num, row in enumerate(all_rows, start=2):
         screenshot_path = f"screenshots/row_{row_num}_error_{timestamp}.png"
         html_path = f"screenshots/row_{row_num}_error_{timestamp}.html"
         try:
-            driver = es_driver if "es-square.net" in url else itandi_driver
-            driver.save_screenshot(screenshot_path)
-            with open(html_path, 'w', encoding='utf-8') as f:
-                f.write(driver.page_source)
+            driver = None
+            if "es-square.net" in url:
+                driver = es_driver
+            elif "itandibb.com" in url:
+                driver = itandi_driver
+            elif "bb.ielove.jp" in url:
+                driver = ielove_driver
+            if driver:
+                driver.save_screenshot(screenshot_path)
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
         except Exception as ee:
             print(f"⚠ Row {row_num} スクショ保存失敗: {ee}")
         print(f"❌ Row {row_num} エラー: {e}")
@@ -199,4 +251,5 @@ for row_num, row in enumerate(all_rows, start=2):
 # === 終了処理 ===
 es_driver.quit()
 itandi_driver.quit()
+ielove_driver.quit()
 print("✅ 全処理完了")
