@@ -133,7 +133,7 @@ def login_ielove(driver):
         driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
         driver.find_element(By.ID, "loginButton").click()
         WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, "//title[contains(text(), '物件詳細')]"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "li#tab-1.selected"))
         )
         print("✅ IELBBログイン成功")
         return True
@@ -144,8 +144,6 @@ def login_ielove(driver):
 # ログイン実行
 es_logged_in = login_es(es_driver)
 itandi_logged_in = login_itandi(itandi_driver)
-
-# いえらぶBBは初回でログインのみ行い、以降はログイン状態を維持
 ielove_logged_in = login_ielove(ielove_driver)
 
 # === 各物件URLのステータス確認 ===
@@ -192,15 +190,21 @@ for row_num, row in enumerate(all_rows, start=2):
 
         elif "bb.ielove.jp" in url and ielove_logged_in:
             ielove_driver.get(url)
-            time.sleep(2)
+            WebDriverWait(ielove_driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.mar-top-12.detail-info.leasing-detail-info"))
+            )
+            time.sleep(1)
 
-            if ielove_driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm"):
+            app_elems = ielove_driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm")
+            rent_elems = ielove_driver.find_elements(By.CSS_SELECTOR, "span.for-rent")
+
+            if app_elems:
                 has_application = True
-            elif ielove_driver.find_elements(By.CSS_SELECTOR, "span.for-rent"):
+            elif rent_elems:
                 has_application = False
             else:
                 print(f"⚠ Row {row_num} IELBB → 募集状況の判定ができませんでした")
-                has_application = True  # 念のため申込あり扱い
+                has_application = True
 
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             screenshot_path = f"screenshots/ielove_row_{row_num}_{timestamp}.png"
@@ -213,17 +217,13 @@ for row_num, row in enumerate(all_rows, start=2):
 
         # === ステータスと日付更新ロジック ===
         if has_application:
-            # ステータスを「申込あり」（=空）に変更
             sheet.update_cell(row_num, STATUS_COL, "")
-            # 申込日がまだ書かれていない場合のみ記録する
             if current_status != "":
                 sheet.update_cell(row_num, ENDED_COL, now_jst.strftime("%Y-%m-%d %H:%M"))
             else:
                 print(f"🔁 Row {row_num} → すでに申込あり、日付維持")
         else:
-            # ステータスを「募集中」に変更
             sheet.update_cell(row_num, STATUS_COL, "募集中")
-            # 日付が入っているなら消す
             if current_date != "":
                 sheet.update_cell(row_num, ENDED_COL, "")
 
