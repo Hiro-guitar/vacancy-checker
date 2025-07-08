@@ -132,6 +132,11 @@ def login_ielove(driver):
         driver.find_element(By.ID, "_4407f7df050aca29f5b0c2592fb48e60").send_keys(os.environ["IELOVE_ID"])
         driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
         driver.find_element(By.ID, "loginButton").click()
+
+        # デバッグ用スクショ
+        time.sleep(3)
+        driver.save_screenshot("screenshots/ielove_login_debug.png")
+
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.savedSearch__title"))
         )
@@ -140,7 +145,7 @@ def login_ielove(driver):
     except Exception as e:
         print(f"❌ IELBBログイン失敗: {e}")
         return False
-
+        
 # ログイン実行
 es_logged_in = login_es(es_driver)
 itandi_logged_in = login_itandi(itandi_driver)
