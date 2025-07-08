@@ -133,7 +133,7 @@ def login_ielove(driver):
         driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
         driver.find_element(By.ID, "loginButton").click()
         WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "li#tab-1.selected"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.savedSearch__title"))
         )
         print("✅ IELBBログイン成功")
         return True
