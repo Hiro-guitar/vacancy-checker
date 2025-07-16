@@ -124,35 +124,48 @@ def login_itandi(driver):
         url = row[URL_COL - 1].strip()
         if "itandibb.com" not in url:
             continue
+
         driver.get(url)
+
         try:
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="email"]')))
-            driver.execute_script("""
-            const emailInput = Array.from(document.querySelectorAll('input[name="email"]')).find(el => el.offsetParent !== null);
-            const passwordInput = Array.from(document.querySelectorAll('input[name="password"]')).find(el => el.offsetParent !== null);
-            function triggerInputEvents(element, value) {
-                const lastValue = element.value;
-                element.focus();
-                element.value = value;
-                const inputEvent = new Event('input', { bubbles: true });
-                const changeEvent = new Event('change', { bubbles: true });
-                const tracker = element._valueTracker;
-                if (tracker) tracker.setValue(lastValue);
-                element.dispatchEvent(inputEvent);
-                element.dispatchEvent(changeEvent);
-            }
-            if (emailInput && passwordInput) {
-                triggerInputEvents(emailInput, arguments[0]);
-                triggerInputEvents(passwordInput, arguments[1]);
-            }
-            """, os.environ["ITANDI_EMAIL"], os.environ["ITANDI_PASSWORD"])
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[type="submit"][value="ログイン"]'))).click()
-            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//span[text()='設備・詳細']")))
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "email")))
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "password")))
+
+            email_input = driver.find_element(By.ID, "email")
+            password_input = driver.find_element(By.ID, "password")
+
+            email_input.clear()
+            email_input.send_keys(os.environ["ITANDI_EMAIL"])
+            password_input.clear()
+            password_input.send_keys(os.environ["ITANDI_PASSWORD"])
+
+            login_btn = driver.find_element(By.CSS_SELECTOR, 'input.filled-button[type="submit"]')
+            login_btn.click()
+
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'ログアウト') or contains(text(), '物件')]"))
+            )
+
             print("✅ ITANDIログイン成功")
             return True
+
         except Exception as e:
+            # 👇 スクリーンショット保存をここで実施
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/itandi_login_error_{timestamp}.png"
+            html_path = f"screenshots/itandi_login_error_{timestamp}.html"
+            try:
+                driver.save_screenshot(screenshot_path)
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+                print(f"📸 ITANDI スクリーンショット: {screenshot_path}")
+                print(f"📝 ITANDI HTML: {html_path}")
+            except Exception as ee:
+                print(f"⚠ スクリーンショット保存失敗: {ee}")
+
             print(f"❌ ITANDIログイン失敗: {e}")
             return False
+
     return False
 
 def check_itandi(driver, url, row_num):
