@@ -134,28 +134,30 @@ def check_es(driver, url, row_num):
     driver.get(url)
 
     try:
-        # 申込あり or 404 エラーの要素が現れるまで最大10秒待機
-        WebDriverWait(driver, 10).until(
-            lambda d: d.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and normalize-space(text())='申込あり']") 
-                      or d.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
-        )
-    except TimeoutException:
-        print(f"⚠ Row {row_num} ES → 要素が見つからずタイムアウト。募集中と判定")
-    
-    # 申込ありの要素を取得
-    applied = driver.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and normalize-space(text())='申込あり']")
-    # 404エラーの要素を取得
-    error404 = driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
-    
-    # スクリーンショットも残しておくとデバッグしやすい
-    screenshot_path = f"screenshots/es_row_{row_num}.png"
-    driver.save_screenshot(screenshot_path)
-    print(f"📸 Row {row_num} スクリーンショット: {screenshot_path}")
+        # ページ読み込み完了まで最大15秒待機
+        WebDriverWait(driver, 15).until(lambda d: d.execute_script("return document.readyState") == "complete")
+        time.sleep(1)  # JSで動的に追加される要素のために少し待機
 
-    if applied or error404:
-        return True  # 申込済み
-    else:
-        return False  # 募集中
+        # 申込あり or 404 エラーの要素を取得
+        applied = driver.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and normalize-space(text())='申込あり']")
+        error404 = driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
+
+        # スクリーンショットも残す
+        screenshot_path = f"screenshots/es_row_{row_num}.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"📸 Row {row_num} スクリーンショット: {screenshot_path}")
+
+        if applied or error404:
+            return True  # 申込済み
+        else:
+            return False  # 募集中
+
+    except TimeoutException:
+        print(f"⚠ Row {row_num} ES → ページロードタイムアウト。募集中と判定")
+        screenshot_path = f"screenshots/es_row_{row_num}_timeout.png"
+        driver.save_screenshot(screenshot_path)
+        print(f"📸 Row {row_num} タイムアウトスクショ: {screenshot_path}")
+        return False
 
 def login_itandi(driver):
     for row in all_rows:
