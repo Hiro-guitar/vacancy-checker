@@ -129,9 +129,18 @@ def login_es(driver):
 
 def check_es(driver, url, row_num):
     driver.get(url)
-    time.sleep(2)
-    elems = driver.find_elements(By.XPATH, "//span[contains(@class, 'MuiChip-label') and normalize-space()='申込あり']")
-    return bool(elems) or bool(driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]"))
+    time.sleep(2)  # 必要に応じて WebDriverWait に置き換え可
+
+    # 申込ありの要素を探す
+    applied = driver.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and text()='申込あり']")
+
+    # 404エラーも判定
+    error404 = driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
+
+    if applied or error404:
+        return True  # 申込済み
+    else:
+        return False  # 募集中
 
 def login_itandi(driver):
     for row in all_rows:
