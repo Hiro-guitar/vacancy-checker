@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
+from selenium.common.exceptions import TimeoutException
 
 def is_valid_url(url):
     try:
@@ -127,15 +128,29 @@ def login_es(driver):
             return False
     return False
 
+from selenium.common.exceptions import TimeoutException
+
 def check_es(driver, url, row_num):
     driver.get(url)
-    time.sleep(2)  # 必要に応じて WebDriverWait に置き換え可
 
-    # 申込ありの要素を探す
-    applied = driver.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and text()='申込あり']")
-
-    # 404エラーも判定
+    try:
+        # 申込あり or 404 エラーの要素が現れるまで最大10秒待機
+        WebDriverWait(driver, 10).until(
+            lambda d: d.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and normalize-space(text())='申込あり']") 
+                      or d.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
+        )
+    except TimeoutException:
+        print(f"⚠ Row {row_num} ES → 要素が見つからずタイムアウト。募集中と判定")
+    
+    # 申込ありの要素を取得
+    applied = driver.find_elements(By.XPATH, "//span[contains(@class, 'eds-tag__label') and normalize-space(text())='申込あり']")
+    # 404エラーの要素を取得
     error404 = driver.find_elements(By.XPATH, "//div[contains(text(), 'エラーコード：404')]")
+    
+    # スクリーンショットも残しておくとデバッグしやすい
+    screenshot_path = f"screenshots/es_row_{row_num}.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 Row {row_num} スクリーンショット: {screenshot_path}")
 
     if applied or error404:
         return True  # 申込済み
