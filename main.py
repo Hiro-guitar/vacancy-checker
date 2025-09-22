@@ -100,16 +100,30 @@ def login_es(driver):
             continue
         driver.get(url)
         try:
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'いい生活アカウントでログイン')]"))).click()
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
-            driver.find_element(By.NAME, "username").send_keys(os.environ["ES_EMAIL"])
-            driver.find_element(By.NAME, "password").send_keys(os.environ["ES_PASSWORD"])
+            # ユーザー名入力待ち
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "username")))
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "password")))
+
+            driver.find_element(By.ID, "username").send_keys(os.environ["ES_EMAIL"])
+            driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
+
+            # 「続ける」ボタンをクリック
             driver.find_element(By.XPATH, "//button[@type='submit']").click()
-            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '物件概要')]")))
+
+            # ログイン後の画面に「物件概要」が出るまで待機
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '物件概要')]"))
+            )
+
             print("✅ ESログイン成功")
             return True
+
         except Exception as e:
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = f"screenshots/es_login_error_{timestamp}.png"
+            driver.save_screenshot(screenshot_path)
             print(f"❌ ESログイン失敗: {e}")
+            print(f"📸 スクショ: {screenshot_path}")
             return False
     return False
 
