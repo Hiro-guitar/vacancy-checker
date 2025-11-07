@@ -113,8 +113,7 @@ def login_es(driver):
 
             # ログイン後の画面に「物件概要」が出るまで待機
             WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '物件概要')]")),
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'お探しのページは見つかりませんでした')]")),
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), '物件')]")),
             )
 
             print("✅ ESログイン成功")
