@@ -1,4 +1,24 @@
-- name: Run discovery
+name: Discover Treasure Properties
+
+on:
+  workflow_dispatch: # 手動実行用ボタンを表示させる設定
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install selenium requests chromedriver-autoinstaller
+
+      - name: Run discovery
         run: python discover.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
@@ -10,4 +30,4 @@
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots
-          path: evidence.png  # 単一のファイル名を指定
+          path: evidence.png
