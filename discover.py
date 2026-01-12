@@ -23,48 +23,36 @@ def send_discord(message):
     if url:
         requests.post(url, json={"content": message})
 
-def login_es(driver):
+def main():
+    driver = create_driver()
+    send_discord("📸 【現場検証】画面キャプチャを取得します...")
+    
     try:
+        # 1. ログインページへ
         driver.get(ES_SEARCH_URL)
-        # ユーザー名入力待ち
+        time.sleep(5)
+        
+        # 2. ログイン実行
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "username")))
         driver.find_element(By.ID, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        # ログイン後、少し長めに待機してから状況を保存
-        print("⏳ ログイン後のページ読み込みを待機中...")
+        # 3. 遷移を待つ
+        print("⏳ 読み込み待機中...")
         time.sleep(15)
         
-        # 【重要】物件一覧を探す前に、今の画面を「evidence.png」として保存
+        # 4. 【ここが重要】何があろうと今の画面を撮る
+        driver.save_screenshot("evidence.png")
+        print("📸 evidence.png を保存しました")
+        
+    except Exception as e:
+        print(f"❌ エラー発生: {e}")
         driver.save_screenshot("evidence.png")
         
-        # 判定
-        items = driver.find_elements(By.CSS_SELECTOR, "div.MuiPaper-root")
-        if len(items) > 0:
-            print(f"✅ 物件を {len(items)} 件検知しました。")
-            return True
-        else:
-            print("❓ 物件リスト（MuiPaper）が見つかりません。")
-            return False
-            
-    except Exception as e:
-        print(f"❌ ログインプロセスエラー: {e}")
-        driver.save_screenshot("evidence.png")
-        return False
-
-def main():
-    driver = create_driver()
-    send_discord("🔍 検証モード：いい生活スクエアの画面を確認します...")
-    
-    success = login_es(driver)
-    
-    if not success:
-        send_discord("⚠️ 物件一覧を認識できませんでした。GitHubのArtifactsから「evidence.png」を確認してください。")
-    else:
-        send_discord("✅ 物件一覧を正常に認識しました。")
-
-    driver.quit()
+    finally:
+        send_discord("✅ キャプチャ完了。Artifactsを確認してください。")
+        driver.quit()
 
 if __name__ == "__main__":
     main()
