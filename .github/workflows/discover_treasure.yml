@@ -1,0 +1,23 @@
+name: Discover Treasure Properties
+
+on:
+  workflow_dispatch: # 手動で実行
+  # schedule:
+  #   - cron: '*/15 * * * *' # 15分おきに実行（後でコメント解除）
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install selenium requests chromedriver-autoinstaller
+      - name: Run discovery
+        run: python discover.py
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
