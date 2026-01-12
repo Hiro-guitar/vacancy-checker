@@ -15,7 +15,8 @@ def create_driver():
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1280,1024')
+    options.add_argument('--window-size=1920,1080') # 画面を大きくして確実に要素を捉える
+    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     return webdriver.Chrome(options=options)
 
 def send_discord(message):
@@ -24,28 +25,36 @@ def send_discord(message):
         requests.post(url, json={"content": message})
 
 def login_es(driver):
-    """既存のmain.pyから移植したログイン処理"""
     try:
-        driver.get(ES_SEARCH_URL) # 検索URLを叩くとログインへ飛ばされる前提
-        # ユーザー名入力待ち
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "username")))
+        print("🌐 いい生活スクエアへアクセス中...")
+        driver.get(ES_SEARCH_URL)
+        time.sleep(5)
+        
+        # ログイン画面へのリダイレクトを待つ
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "username")))
+        
+        print("🔑 ログイン情報を入力中...")
         driver.find_element(By.ID, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        # ログイン後の画面表示を待機
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.MuiPaper-root")))
-        print("✅ いい生活ログイン成功")
+        # ログイン後の物件リスト（MuiPaper）が出るまで最大30秒待つ
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.MuiPaper-root")))
+        print("✅ ログイン成功！")
         return True
     except Exception as e:
         print(f"❌ ログイン失敗: {e}")
+        driver.save_screenshot("login_failed.png") # 失敗した瞬間の証拠写真
+        with open("page_source.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source) # HTMLも保存
         return False
 
 def check_suumo_competitors(driver, name, floor):
+    # (中略 - 前回と同じロジック)
     search_query = f"{name} {floor}"
     suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC001/?ar=030&bs=040&ta=13&fw={search_query}"
     driver.get(suumo_url)
-    time.sleep(2)
+    time.sleep(3)
     try:
         elements = driver.find_elements(By.XPATH, "//*[contains(text(), '取り扱い店舗数')]")
         if not elements: return 0
@@ -57,45 +66,35 @@ def check_suumo_competitors(driver, name, floor):
 
 def main():
     driver = create_driver()
-    send_discord("🔍 物出し調査システムを起動しました...") # 動作確認用
+    send_discord("🔍 いい生活スクエアの調査を開始します...")
     
     if not login_es(driver):
-        send_discord("❌ いい生活へのログインに失敗しました。パスワード等を確認してください。")
+        send_discord("❌ ログインに失敗しました。GitHubのArtifactsからスクリーンショットを確認してください。")
         driver.quit()
         return
 
-    # 1. いい生活スクエアの検索結果を取得
-    driver.get(ES_SEARCH_URL)
-    time.sleep(5) # 読み込みを長めに待機
-    
+    # 物件取得
     items = driver.find_elements(By.CSS_SELECTOR, "div.MuiPaper-root")
-    print(f"取得した物件数: {len(items)}")
+    print(f"📦 取得物件数: {len(items)}")
     
-    if len(items) == 0:
-        send_discord("⚠️ 物件が見つかりませんでした。検索URLやセレクタを確認する必要があります。")
-        driver.save_screenshot("error_no_items.png") # デバッグ用
-
     found_count = 0
-    for item in items[:20]: # 20件チェック
+    # ここからは前回と同じ...
+    for item in items[:20]:
         try:
             name = item.find_element(By.CSS_SELECTOR, "p.MuiTypography-subtitle1").text
             try:
                 floor = item.find_element(By.XPATH, ".//div[contains(text(), '階')]").text
             except:
                 floor = ""
-                
-            competitors = check_suumo_competitors(driver, name, floor)
             
-            # テスト用に、10件以内なら全て通知するか、条件を絞るか調整可能
-            if competitors <= 1: 
-                msg = f"✨ 【お宝候補】競合 {competitors} 件\n物件: {name} {floor}\nリンク: {ES_SEARCH_URL}"
-                send_discord(msg)
+            competitors = check_suumo_competitors(driver, name, floor)
+            if competitors <= 1:
+                send_discord(f"✨ 【お宝】競合{competitors}件: {name} {floor}")
                 found_count += 1
-                
         except:
             continue
 
-    send_discord(f"✅ 調査完了。本日の新規お宝物件: {found_count} 件でした。")
+    send_discord(f"✅ 調査完了。新規お宝: {found_count}件")
     driver.quit()
 
 if __name__ == "__main__":
