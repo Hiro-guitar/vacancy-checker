@@ -32,13 +32,12 @@ def normalize(text):
     return text.strip()
 
 def check_suumo_highlight_count(driver, name, floor, target_rent, target_area):
-    """SUUMOで指定の賃料・面積の掲載社数をカウント"""
-    # 階数から数値のみ抽出
+    # 階数から数値のみ抽出（102号室なら2階と判定されないよう、建物全体の階建て情報を優先したいが、まずは名前＋階で検索）
     floor_num = "".join(re.findall(r'\d+', floor))
     search_query = f"{name} {floor_num}".strip()
     suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC001/?ar=030&bs=040&ta=13&fw={search_query}"
     
-    driver.execute_script("window.open('');") # 新しいタブを開く
+    driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[-1])
     driver.get(suumo_url)
     time.sleep(4)
@@ -48,7 +47,6 @@ def check_suumo_highlight_count(driver, name, floor, target_rent, target_area):
         match_count = 0
         norm_rent = normalize(target_rent)
         norm_area = normalize(target_area)
-
         for item in highlights:
             try:
                 rent_text = item.find_element(By.CSS_SELECTOR, ".detailbox-property-point").text
@@ -56,90 +54,88 @@ def check_suumo_highlight_count(driver, name, floor, target_rent, target_area):
                 if normalize(rent_text) == norm_rent and normalize(area_text) == norm_area:
                     match_count += 1
             except: continue
-        
-        driver.close() # タブを閉じる
-        driver.switch_to.window(driver.window_handles[0]) # 元に戻す
+        driver.close()
+        driver.switch_to.window(driver.window_handles[0])
         return match_count
     except:
-        driver.close()
+        if len(driver.window_handles) > 1: driver.close()
         driver.switch_to.window(driver.window_handles[0])
         return 99
 
 def main():
     driver = create_driver()
-    send_discord("🔍 精密モーダル解析モードを起動しました...")
+    send_discord("🔍 物件名のタグ情報を特定しました。精密調査を再開します...")
     
     try:
-        # 1. ログイン
         driver.get(ES_SEARCH_URL)
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "username")))
         driver.find_element(By.ID, "username").send_keys(os.environ["ES_EMAIL"])
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        time.sleep(12) # 読み込み待機
+        time.sleep(15)
 
-        # 2. 物件リスト取得 (拡張機能の bukkenListItem に準拠)
-        items = driver.find_elements(By.CSS_SELECTOR, 'div[data-testclass="bukkenListItem"]')
-        if not items:
-            send_discord("⚠️ 物件リストが見つかりません。")
+        # 教えていただいたタグで物件名を一括取得
+        name_elements = driver.find_elements(By.CSS_SELECTOR, 'p.MuiTypography-root.MuiTypography-body1.css-1bkh2wx')
+        
+        if not name_elements:
+            send_discord("⚠️ 指定の物件名タグが見つかりません。レイアウトが変更された可能性があります。")
             return
 
         found_count = 0
-        for i, item in enumerate(items[:10]): # まずは上位10件
+        checked_count = 0
+        
+        for name_el in name_elements[:15]:
             try:
-                # 一覧から物件名と賃料を取得（拡張機能の抽出ロジック参考）
-                name = item.querySelector("h2").text.strip() if hasattr(item, "querySelector") else item.find_element(By.TAG_NAME, "h2").text.strip()
-                
-                # 物件をクリックしてモーダルを開く
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item)
-                time.sleep(1)
-                item.click()
-                time.sleep(3) # モーダル表示待ち
+                name = name_el.text.strip()
+                if not name: continue
 
-                # 3. モーダル内から面積と階数を抽出
-                modal = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
-                modal_text = modal.text
+                # 物件をクリックして詳細を開く（名前の要素自体をクリック）
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_el)
+                time.sleep(1)
+                name_el.click()
+                time.sleep(4) # モーダル表示待ち
+
+                # モーダルから詳細情報を取得
+                modal_text = driver.find_element(By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb').text
                 
-                # 面積 (〇〇.〇〇㎡)
+                # 面積・階数・賃料の抽出（拡張機能のロジックに準拠）
                 area_match = re.search(r'(\d+\.?\d*)㎡', modal_text)
                 area = area_match.group(0) if area_match else ""
                 
-                # 階数 (〇階)
                 floor_match = re.search(r'(\d+)階', modal_text)
                 floor = floor_match.group(0) if floor_match else ""
 
-                # 賃料は一覧の兄弟要素から取得（拡張機能の css-smu62q を参考）
-                # ここでは簡易的にカード内テキストから抽出
-                rent_match = re.search(r'(\d+,?\d+)円', item.text)
-                if rent_match:
-                    raw_rent = rent_match.group(1).replace(',', '')
-                    rent = f"{int(raw_rent)//10000}万" # "123000" -> "12.3万" (拡張機能形式)
-                else:
-                    rent = ""
+                # 賃料：一覧の親要素を遡って、そこに含まれる金額テキストから取得
+                parent_card = name_el.find_element(By.XPATH, "./ancestor::div[contains(@data-testclass, 'bukkenListItem')]")
+                rent_candidates = re.findall(r'(\d{1,3}(?:,\d{3})+)', parent_card.text)
+                rent = ""
+                if rent_candidates:
+                    raw_rent = rent_candidates[0].replace(',', '')
+                    rent = f"{int(raw_rent)//10000}万"
 
-                print(f"🧐 解析中: {name} ({rent}/{area})")
+                print(f"🧐 照合中: {name} ({rent}/{area})")
                 
-                # 4. SUUMO照合
-                count = check_suumo_highlight_count(driver, name, floor, rent, area)
+                if rent and area:
+                    count = check_suumo_highlight_count(driver, name, floor, rent, area)
+                    if count <= 1:
+                        send_discord(f"✨ 【お宝候補】競合 {count}社\n物件: {name} {floor}\n条件: {rent} / {area}\nリンク: {ES_SEARCH_URL}")
+                        found_count += 1
                 
-                if count <= 1:
-                    send_discord(f"✨ 【お宝確定】競合 {count}社\n物件: {name} {floor}\n賃料: {rent} / 面積: {area}\nリンク: {ES_SEARCH_URL}")
-                    found_count += 1
+                checked_count += 1
 
                 # モーダルを閉じる
-                close_btn = driver.find_element(By.CSS_SELECTOR, 'svg[data-testid="CloseIcon"]')
-                close_btn.click()
+                driver.find_element(By.CSS_SELECTOR, 'svg[data-testid="CloseIcon"]').click()
                 time.sleep(1)
 
             except Exception as e:
                 print(f"物件スキップ: {e}")
                 continue
 
-        send_discord(f"✅ 調査完了。発見数: {found_count}")
+        send_discord(f"✅ 調査完了。{checked_count}件中、{found_count}件のお宝が見つかりました。")
 
     except Exception as e:
-        send_discord(f"🚨 システムエラー: {e}")
+        send_discord(f"🚨 エラー: {e}")
     finally:
         driver.save_screenshot("evidence.png")
         driver.quit()
