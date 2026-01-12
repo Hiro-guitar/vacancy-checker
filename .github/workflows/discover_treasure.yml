@@ -1,39 +1,13 @@
-name: Discover Treasure Properties
-
-on:
-  workflow_dispatch: # 手動で実行
-  # schedule:
-  #   - cron: '*/15 * * * *' # 運用が安定したらコメント解除
-
-jobs:
-  discover:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          pip install selenium requests chromedriver-autoinstaller
-
-      - name: Run discovery
+- name: Run discovery
         run: python discover.py
         env:
-          # ここに Secrets を追加することでプログラムがログインできるようになります
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           ES_EMAIL: ${{ secrets.ES_EMAIL }}
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
 
-      # 失敗時にスクリーンショットを確認するための設定（重要！）
       - name: Upload Debug Artifacts
-        if: always() 
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-screenshots
-          path: |
-            login_failed.png
-            page_source.html
+          path: evidence.png  # 単一のファイル名を指定
