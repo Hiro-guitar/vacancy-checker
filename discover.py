@@ -59,9 +59,7 @@ def check_suumo(driver, info):
 def main():
     driver = create_driver()
     send_discord("🔍 調査を開始します...")
-    print("--- 調査開始 ---")
     
-    # 拡張機能の lastModalAddress / Area の代わり
     last_modal_address = ""
     last_modal_area = ""
     
@@ -83,31 +81,44 @@ def main():
         found_count = 0
         for i in range(min(len(items), 15)):
             try:
-                # 膜（Backdrop）の待機をやめ、拡張機能と同じく「中身の書き換え」を基準にする
                 current_items = driver.find_elements(By.XPATH, items_xpath)
                 item = current_items[i]
                 
+                # 物件名取得
                 name = item.find_element(By.CSS_SELECTOR, 'p.css-1bkh2wx').text.strip()
                 
-                # JavaScriptでクリック（Chrome拡張の挙動）
+                # 1. 【賃料取得】モーダル外から取得
+                # クラス名 smu62q を持ち、かつ不透明度が0でない（表示されている）spanからカンマ付きの数字を抜く
+                rent_val = 0.0
+                try:
+                    # 拡張機能のロジックを忠実に再現
+                    # 兄弟要素 css-57ym5z の中の css-smu62q を探す。
+                    # opacity: 0 の要素が混じっているため、テキストが空でないものを特定
+                    rent_spans = item.find_elements(By.XPATH, 'following-sibling::div[contains(@class, "css-57ym5z")]//span[contains(@class, "css-smu62q")]')
+                    for s in rent_spans:
+                        t = s.text.strip()
+                        if "," in t:
+                            rent_val = clean_num(t)
+                            break
+                except:
+                    print(f"  ⚠️ {name} の賃料抽出に失敗")
+
+                # 2. クリック
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item)
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", item)
                 
-                # モーダル取得待機
+                # 3. モーダル書き換え待機
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                # --- Chrome拡張の extractPropertyInfo ループを移植 ---
                 address_text = ""
                 area_text = ""
-                for _ in range(50): # 10秒待機
+                for _ in range(50):
                     try:
                         address_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
                         address_text = address_el.text.strip()
                         area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
                         area_text = area_match.group(0) if area_match else ""
-                        
-                        # 前回の物件情報と異なれば読み込み完了
                         if address_text and area_text and (address_text != last_modal_address or area_text != last_modal_area):
                             last_modal_address = address_text
                             last_modal_area = area_text
@@ -115,11 +126,9 @@ def main():
                     except: pass
                     time.sleep(0.2)
 
-                # 情報抽出
-                modal_text = modal.text
-                rent_val = clean_num(re.search(r'([\d,]+)円', modal_text).group(1) if re.search(r'([\d,]+)円', modal_text) else "0")
+                # 4. 情報抽出
                 area_val = clean_num(area_text)
-                floor = re.search(r'地上(\d+)階', modal_text).group(0) if re.search(r'地上(\d+)階', modal_text) else ""
+                floor = re.search(r'地上(\d+)階', modal.text).group(0) if re.search(r'地上(\d+)階', modal.text) else ""
 
                 info = {"name": name, "rent": rent_val, "area": area_val, "floor": floor}
                 print(f"🧐 [{i+1}] 照合中: {name} ({rent_val}万/{area_val}㎡)")
@@ -129,12 +138,12 @@ def main():
                     send_discord(f"✨ 【お宝候補】競合 {count}社\n物件: {name} {floor}\n条件: {rent_val}万 / {area_val}㎡")
                     found_count += 1
 
-                # 拡張機能と同じセレクタで閉じる
+                # 5. 閉じる
                 driver.execute_script("""
                     var modalClose = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
                     if (modalClose) modalClose.closest('button').click();
                 """)
-                time.sleep(1)
+                time.sleep(1.2)
 
             except Exception as e:
                 print(f"物件[{i}] スキップ: {e}")
@@ -146,7 +155,6 @@ def main():
 
     except Exception as e:
         print(f"致命的なエラー: {e}")
-        send_discord(f"🚨 システム停止: {e}")
     finally:
         driver.save_screenshot("evidence.png")
         driver.quit()
