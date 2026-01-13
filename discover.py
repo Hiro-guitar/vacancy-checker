@@ -7,12 +7,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys  # エスケープキー用に追加
 
 def create_driver():
     options = Options()
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage') # メモリ不足対策
+    options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=2560,1440')
     return webdriver.Chrome(options=options)
 
@@ -26,7 +27,6 @@ def send_discord(message):
 
 def clean_num(text):
     if not text: return 0.0
-    # 「12.5万円」「125,000」などから数値だけを抜き出す
     text = text.replace(',', '').translate(str.maketrans('０１２３４５６７８９．', '0123456789.'))
     nums = re.findall(r'\d+\.?\d*', text)
     if not nums: return 0.0
@@ -75,7 +75,7 @@ def main():
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        time.sleep(15) # 読み込み待ち
+        time.sleep(15) 
         
         # 2. 物件リスト取得
         items = driver.find_elements(By.CSS_SELECTOR, 'div[data-testclass="bukkenListItem"]')
@@ -88,20 +88,19 @@ def main():
         found_count = 0
         for i in range(min(len(items), 15)):
             try:
-                # 再取得
+                # 毎回リストを最新状態で取得
                 current_items = driver.find_elements(By.CSS_SELECTOR, 'div[data-testclass="bukkenListItem"]')
                 item = current_items[i]
                 
-                # 一覧から名前と賃料を取得
                 name = item.find_element(By.CSS_SELECTOR, 'p.css-1bkh2wx').text.strip()
                 rent_val = clean_num(item.text.split("円")[0].split("\n")[-1])
 
-                # クリックしてモーダルを開く
+                # 物件をクリックしてモーダルを開く
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item)
                 time.sleep(1)
                 item.click()
                 
-                # モーダル解析
+                # モーダル要素を特定
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
                 area_match = re.search(r'(\d+\.?\d*)㎡', modal.text)
@@ -118,18 +117,25 @@ def main():
                     send_discord(f"✨ 【お宝候補】競合 {count}社\n物件: {name} {floor}\n条件: {rent_val}万 / {area_val}㎡")
                     found_count += 1
 
-                # モーダルを閉じる（Chrome拡張のセレクタ）
-                close_btn = driver.find_element(By.CSS_SELECTOR, '.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]')
-                driver.execute_script("arguments[0].closest('button').click();", close_btn)
-                
-                # モーダル消失待ち
+                # --- 修正の要：モーダルを確実に閉じる ---
+                print("物件詳細モーダルを閉じます...")
+                # ページ全体ではなく、modal要素の中からCloseIconを探す（これで市区町村チップの誤爆を防ぐ）
+                try:
+                    close_svg = modal.find_element(By.CSS_SELECTOR, 'svg[data-testid="CloseIcon"]')
+                    # SVGの親であるButton要素をJSでクリック
+                    driver.execute_script("arguments[0].closest('button').click();", close_svg)
+                except:
+                    # 失敗時のバックアップ：エスケープキーで閉じる
+                    driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+
+                # モーダルが消えるのを待つ
                 WebDriverWait(driver, 10).until_not(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 time.sleep(1)
 
             except Exception as e:
                 print(f"物件[{i}] スキップ原因: {e}")
-                # 強制クローズ試行
-                try: driver.execute_script("document.querySelector('svg[data-testid=\"CloseIcon\"]').parentElement.click();")
+                # 万が一変なモーダルが開いていたらエスケープキーで閉じる
+                try: driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
                 except: pass
                 continue
 
@@ -139,9 +145,7 @@ def main():
         print(f"致命的なエラー: {e}")
         send_discord(f"🚨 システム停止: {e}")
     finally:
-        # 何があっても必ずスクショを撮る
         driver.save_screenshot("evidence.png")
-        print("スクショを保存しました: evidence.png")
         driver.quit()
 
 if __name__ == "__main__":
