@@ -76,13 +76,31 @@ def main():
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
+        # --- ログイン完了後 ---
         time.sleep(15) 
+
+        # 【追加】30件全ての物件要素を読み込ませるためのスクロール処理
+        print("📥 物件リストを最後まで読み込んでいます...")
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        while True:
+            # 一番下までスクロール
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3) # 読み込み待ち（少し長めに設定）
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            # ページ長が変わらなくなったら（＝全て読み込んだら）終了
+            if new_height == last_height:
+                break
+            last_height = new_height
         
+        # 読み込み終わったら一番上に戻ってから処理開始
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+
         # 物件リストの取得
         items_xpath = '//div[@data-testclass="bukkenListItem"]'
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, items_xpath)))
         items = driver.find_elements(By.XPATH, items_xpath)
-        print(f"発見物件数: {len(items)}")
+        print(f"発見物件数: {len(items)}") # ここが30になれば成功です
         
         found_count = 0
         for i in range(len(items)):
