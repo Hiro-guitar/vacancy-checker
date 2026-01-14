@@ -166,7 +166,11 @@ def main():
 
     except Exception as e:
         print(f"エラー: {e}")
+        send_discord(f"🚨 システム停止: {e}") # エラー時もDiscordに通知
     finally:
+        # 終了前に必ずスクショを保存
+        print("エビデンスを保存します...")
+        driver.save_screenshot("evidence.png")
         driver.quit()
 
 if __name__ == "__main__":
