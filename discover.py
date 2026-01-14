@@ -85,7 +85,7 @@ def main():
         print(f"発見物件数: {len(items)}")
         
         found_count = 0
-        for i in range(min(len(items), 15)):
+        for i in range(len(items)):
             try:
                 # 物件要素のリロード
                 current_items = driver.find_elements(By.XPATH, items_xpath)
