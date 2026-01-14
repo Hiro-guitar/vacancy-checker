@@ -76,24 +76,40 @@ def main():
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        # ログイン後の初期待機
+        # ログイン後の待機
         time.sleep(15) 
         
-        # --- ここから追加：全30件を強制的に読み込ませるスクロール ---
-        print("📥 ページをスクロールして全物件を読み込んでいます...")
-        for _ in range(3):  # 念のため3回に分けてスクロール
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)   # 追従読み込みのための待機
+        # --- 追加：30件全てを表示させるための強制スクロール処理 ---
+        print("📥 物件リストを最後まで読み込んでいます...")
+        last_height = driver.execute_script("return document.body.scrollHeight")
         
-        # 一番上に戻ってから要素取得を開始
+        # 3回程度に分けてスクロールすることで、Lazy Loadを確実にトリガーする
+        for _ in range(3):
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3)  # 追従読み込みを待つための重要な3秒
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+        
+        # 読み込み終わったら、要素取得のために一番上に戻す
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(1)
+        # --------------------------------------------------
 
-        # 物件リストの取得
+        # 3. トータル件数のログ出力
+        try:
+            # ページ上部の「1-30件 / 30件」という表示を狙う
+            total_text = driver.find_element(By.CSS_SELECTOR, '.MuiTypography-root.MuiTypography-body1.css-12s8z8r').text
+            print(f"📊 ページ表示状況: {total_text}")
+        except:
+            print("⚠️ 件数表示が見つかりませんでした")
+
+        # ここで物件リストを取得すれば、len(items) が30になるはずです
         items_xpath = '//div[@data-testclass="bukkenListItem"]'
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, items_xpath)))
         items = driver.find_elements(By.XPATH, items_xpath)
-        print(f"発見物件数: {len(items)}") # ここが30になれば成功です
+        print(f"発見物件数: {len(items)}")
         
         found_count = 0
         for i in range(len(items)):
