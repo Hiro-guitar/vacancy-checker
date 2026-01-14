@@ -76,23 +76,16 @@ def main():
         driver.find_element(By.ID, "password").send_keys(os.environ["ES_PASSWORD"])
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
         
-        # --- ログイン完了後 ---
+        # ログイン後の初期待機
         time.sleep(15) 
-
-        # 【追加】30件全ての物件要素を読み込ませるためのスクロール処理
-        print("📥 物件リストを最後まで読み込んでいます...")
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
-            # 一番下までスクロール
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3) # 読み込み待ち（少し長めに設定）
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            # ページ長が変わらなくなったら（＝全て読み込んだら）終了
-            if new_height == last_height:
-                break
-            last_height = new_height
         
-        # 読み込み終わったら一番上に戻ってから処理開始
+        # --- ここから追加：全30件を強制的に読み込ませるスクロール ---
+        print("📥 ページをスクロールして全物件を読み込んでいます...")
+        for _ in range(3):  # 念のため3回に分けてスクロール
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3)   # 追従読み込みのための待機
+        
+        # 一番上に戻ってから要素取得を開始
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(1)
 
