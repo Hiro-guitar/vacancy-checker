@@ -50,7 +50,6 @@ def check_suumo(driver, info):
                 s_rent = clean_num_strict(card.find_element(By.CSS_SELECTOR, ".detailbox-property-point").text)
                 s_area = clean_num_strict(card.find_element(By.CSS_SELECTOR, ".detailbox-property--col3 div:nth-child(2)").text)
                 
-                # 万単位で完全一致比較
                 es_rent_man = info['rent_raw'] / 10000.0
                 if s_rent == es_rent_man and s_area == info['area']:
                     match_count += 1
@@ -78,80 +77,70 @@ def main():
         
         # ログイン後の待機
         time.sleep(15) 
+        driver.save_screenshot("debug_1_after_login.png") # 【スクショ1】ログイン直後
         
         # --- 追加：30件全てを表示させるための強制スクロール処理 ---
         print("📥 物件リストを最後まで読み込んでいます...")
         last_height = driver.execute_script("return document.body.scrollHeight")
         
-        # 3回程度に分けてスクロールすることで、Lazy Loadを確実にトリガーする
         for _ in range(3):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)  # 追従読み込みを待つための重要な3秒
+            time.sleep(3) 
             new_height = driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 break
             last_height = new_height
         
+        driver.save_screenshot("debug_2_after_scroll.png") # 【スクショ2】スクロール後
+        
         # 読み込み終わったら、要素取得のために一番上に戻す
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(1)
-        # --------------------------------------------------
 
         # 3. トータル件数のログ出力
         try:
-            # ページ上部の「1-30件 / 30件」という表示を狙う
             total_text = driver.find_element(By.CSS_SELECTOR, '.MuiTypography-root.MuiTypography-body1.css-12s8z8r').text
             print(f"📊 ページ表示状況: {total_text}")
         except:
             print("⚠️ 件数表示が見つかりませんでした")
 
-        # ここで物件リストを取得すれば、len(items) が30になるはずです
         items_xpath = '//div[@data-testclass="bukkenListItem"]'
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.XPATH, items_xpath)))
         items = driver.find_elements(By.XPATH, items_xpath)
         print(f"発見物件数: {len(items)}")
         
+        driver.save_screenshot("debug_3_ready_to_loop.png") # 【スクショ3】ループ開始直前
+        
         found_count = 0
         for i in range(len(items)):
             try:
-                # 物件要素のリロード
                 current_items = driver.find_elements(By.XPATH, items_xpath)
                 item = current_items[i]
                 
-                # 物件名を取得
                 name = item.find_element(By.CSS_SELECTOR, 'p.css-1bkh2wx').text.strip()
                 rent_raw = 0.0
                 
-                # --- 【重要】Chrome拡張の「モーダル外から賃料取得」を完全再現 ---
-                # 1. ページ内の全ての「.css-1t7sidb」を取得
                 list_boxes = driver.find_elements(By.CSS_SELECTOR, '.MuiBox-root.css-1t7sidb')
                 for box in list_boxes:
                     try:
-                        # 2. ボックス内の名前が、現在処理中の物件名と一致するか確認
                         name_el = box.find_element(By.CSS_SELECTOR, 'p.MuiTypography-root.MuiTypography-body1.css-1bkh2wx')
                         if name_el.text.strip() == name:
-                            # 3. nextElementSibling (隣の兄弟要素) を取得
                             rent_box = box.find_element(By.XPATH, './following-sibling::div[contains(@class, "css-57ym5z")]')
-                            # 4. その中の span.css-smu62q をすべて取得し、カンマを含むものを探す
                             rent_spans = rent_box.find_elements(By.CSS_SELECTOR, 'span.css-smu62q')
                             for s in rent_spans:
-                                # JSの textContent を使って不可視文字も取得
                                 val = s.get_attribute("textContent")
                                 if "," in val:
                                     rent_raw = clean_num_strict(val)
                                     break
-                            if rent_raw > 0: break # 見つかったらループを抜ける
+                            if rent_raw > 0: break 
                     except: continue
 
-                # クリックしてモーダルを開く
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item)
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", item)
                 
-                # モーダル待機
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                # 内容の書き換えを待機
                 area_val = 0.0
                 floor = ""
                 for _ in range(50):
@@ -170,14 +159,12 @@ def main():
                 info = {"name": name, "rent_raw": rent_raw, "area": area_val, "floor": floor}
                 print(f"🧐 [{i+1}] 照合中: {name} ({rent_raw}円 / {area_val}㎡)")
 
-                # 完全一致照合
                 count = check_suumo(driver, info)
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
                     send_discord(f"✨ 【お宝候補】他社掲載 {count}件\n物件: {name} {floor}\n条件: {rent_man}万 / {area_val}㎡")
                     found_count += 1
 
-                # 閉じる
                 driver.execute_script("""
                     var closeBtn = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
                     if (closeBtn) closeBtn.closest('button').click();
@@ -193,10 +180,9 @@ def main():
 
     except Exception as e:
         print(f"エラー: {e}")
-        send_discord(f"🚨 システム停止: {e}") # エラー時もDiscordに通知
+        send_discord(f"🚨 システム停止: {e}")
     finally:
-        # 終了前に必ずスクショを保存
-        print("エビデンスを保存します...")
+        print("最終エビデンスを保存します...")
         driver.save_screenshot("evidence.png")
         driver.quit()
 
