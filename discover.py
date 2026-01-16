@@ -42,6 +42,20 @@ def normalize_text(text):
     text = text.replace('㎡', 'm').replace(',', '')
     return text.strip()
 
+def extract_kanji_address(text):
+    """
+    住所から「〇〇丁目」までを抽出し、数字を半角にする
+    例：東京都新宿区西新宿３丁目5-15 -> 東京都新宿区西新宿3
+    """
+    if not text: return ""
+    # 全角数字を半角にする
+    text = text.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+    # 「◯丁目」までを抽出する正規表現
+    match = re.search(r'(.+?\d+)丁目', text)
+    if match:
+        return match.group(1) # 「西新宿3」の部分だけ返す
+    return text # 丁目がない場合はそのまま
+
 def check_suumo(driver, info, index):
     # 検索語句を組み立て (住所 築年月 階建て 面積 賃料)
     # 例: "東京都練馬区... 1998年4月 4階建 26m 9万"
@@ -181,13 +195,15 @@ def main():
                 for _ in range(30):
                     try:
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
-                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
+                        raw_address = addr_el.text.strip() # 元の住所: 東京都新宿区西新宿３丁目5-15
                         
-                        # 住所が変わったら「新しい物件の読み込み完了」と判断
-                        if addr_el.text.strip() != last_modal_address:
-                            address_val = addr_el.text.strip()
+                        if raw_address != last_modal_address:
+                            # 【ここを修正】extract_kanji_address を使って丁目までに変換
+                            address_val = extract_kanji_address(raw_address) 
+                            last_modal_address = raw_address # 判定用には元のフル住所を保存
+                            
+                            area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
                             area_val_str = area_match.group(1) if area_match else ""
-                            last_modal_address = address_val # 次回判定用に保存
                             
                             floor_match = re.search(r'地上(\d+)階', modal.text)
                             floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
@@ -210,19 +226,19 @@ def main():
                 # 3. 賃料を「9万」のような万円表記に変換
                 rent_man_str = f"{rent_raw / 10000:g}万"
 
-                # 4. SUUMOに渡すための情報セット(info)を新しく作る
+                # 4. SUUMOに渡すための情報セット(info)
                 info = {
                     "name": name,
-                    "address": address_val, # ←追加
-                    "built": built_val,     # ←追加
+                    "address": address_val, # ← 丁目までの住所が入る
+                    "built": built_val,
                     "floors": floor_val_str,
                     "area": area_val_str,
-                    "rent": rent_man_str    # ←万円表記に変更
+                    "rent": rent_man_str
                 }
 
-                print(f"🧐 [{i+1}] 照合中: {name} ({rent_man_str} / {area_val_str} / {built_val})")
+                print(f"🧐 [{i+1}] 照合中: {name} ({address_val} / {rent_man_str} / {built_val})")
 
-                # check_suumoを呼び出す (引数に i+1 を追加)
+                # 5. SUUMOチェック実行
                 count = check_suumo(driver, info, i + 1)
                 # --- ここまで ---
                 if count <= 1:
