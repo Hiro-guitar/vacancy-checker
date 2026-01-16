@@ -170,27 +170,61 @@ def main():
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", item)
                 
+                # --- ここから書き換え ---
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                area_val = 0.0
-                floor = ""
-                for _ in range(50):
+                address_val = ""
+                area_val_str = ""
+                floor_val_str = ""
+                
+                # 1. 住所・面積・階数を取得（情報が更新されるまで待機）
+                for _ in range(30):
                     try:
-                        address_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
-                        if address_el.text.strip() != last_modal_address:
-                            last_modal_address = address_el.text.strip()
-                            area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
-                            area_val = clean_num_strict(area_match.group(1)) if area_match else 0.0
+                        addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
+                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
+                        
+                        # 住所が変わったら「新しい物件の読み込み完了」と判断
+                        if addr_el.text.strip() != last_modal_address:
+                            address_val = addr_el.text.strip()
+                            area_val_str = area_match.group(1) if area_match else ""
+                            last_modal_address = address_val # 次回判定用に保存
+                            
                             floor_match = re.search(r'地上(\d+)階', modal.text)
-                            floor = floor_match.group(0) if floor_match else ""
+                            floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
                             break
                     except: pass
-                    time.sleep(0.2)
+                    time.sleep(0.3)
 
-                info = {"name": name, "rent_raw": rent_raw, "area": area_val, "floor": floor}
-                print(f"🧐 [{i+1}] 照合中: {name} ({rent_raw}円 / {area_val}㎡)")
+                # 2. 「築年月」を取得 (例: 2004/01 → 2004年1月)
+                built_val = ""
+                try:
+                    built_raw = driver.execute_script("""
+                        return Array.from(document.querySelectorAll('div.MuiGrid-root'))
+                            .find(div => div.querySelector('b')?.innerText.trim() === '築年月')
+                            .nextElementSibling.innerText.trim();
+                    """)
+                    m = re.match(r'(\d{4})/(\d{1,2})', built_raw)
+                    built_val = f"{m.group(1)}年{int(m.group(2))}月" if m else built_raw
+                except: pass
 
-                count = check_suumo(driver, info)
+                # 3. 賃料を「9万」のような万円表記に変換
+                rent_man_str = f"{rent_raw / 10000:g}万"
+
+                # 4. SUUMOに渡すための情報セット(info)を新しく作る
+                info = {
+                    "name": name,
+                    "address": address_val, # ←追加
+                    "built": built_val,     # ←追加
+                    "floors": floor_val_str,
+                    "area": area_val_str,
+                    "rent": rent_man_str    # ←万円表記に変更
+                }
+
+                print(f"🧐 [{i+1}] 照合中: {name} ({rent_man_str} / {area_val_str} / {built_val})")
+
+                # check_suumoを呼び出す (引数に i+1 を追加)
+                count = check_suumo(driver, info, i + 1)
+                # --- ここまで ---
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
                     send_discord(f"✨ 【お宝候補】他社掲載 {count}件\n物件: {name} {floor}\n条件: {rent_man}万 / {area_val}㎡")
