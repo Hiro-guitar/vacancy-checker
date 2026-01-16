@@ -2,6 +2,7 @@ import os
 import time
 import re
 import requests
+import urllib.parse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -32,26 +33,56 @@ def clean_num_strict(text):
     if not nums: return 0.0
     return float(nums[0])
 
-def check_suumo(driver, info):
-    search_query = f"{info['name']} {info['floor']}".strip()
-    suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC001/?ar=030&bs=040&ta=13&fw={search_query}"
+def normalize_text(text):
+    if not text: return ""
+    # 全角数字・記号を半角に変換
+    text = text.translate(str.maketrans('０１２３４５６７８９．', '0123456789.'))
+    # 空白削除、㎡をmに、カンマ削除
+    text = re.sub(r'\s+', '', text)
+    text = text.replace('㎡', 'm').replace(',', '')
+    return text.strip()
+
+def check_suumo(driver, info, index):
+    # 検索語句を組み立て (住所 築年月 階建て 面積 賃料)
+    # 例: "東京都練馬区... 1998年4月 4階建 26m 9万"
+    search_word = f"{info['address']} {info['built']} {info['floors']} {info['area']} {info['rent']}"
+    search_word = search_word.replace('㎡', 'm')
+    
+    encoded_word = urllib.parse.quote(search_word)
+    # 高精度な一覧表示用エンドポイントを使用
+    suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC011/?ar=030&bs=040&kskbn=01&fw={encoded_word}"
     
     main_window = driver.current_window_handle
     driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[-1])
     driver.get(suumo_url)
-    time.sleep(4)
+    time.sleep(3) # 読み込み待機
+
+    # 個別スクショ保存（物件名を含める）
+    safe_name = re.sub(r'[\\/:*?"<>|]', '', info['name'])
+    driver.save_screenshot(f"suumo_{index}_{safe_name}.png")
 
     match_count = 0
     try:
+        # 拡張機能と同じく「広告物件」のみをターゲットにする
         cards = driver.find_elements(By.CSS_SELECTOR, ".property.property--highlight")
+        target_rent = normalize_text(info['rent']).replace('万', '')
+        target_area = normalize_text(info['area']).replace('m', '')
+
         for card in cards:
             try:
-                s_rent = clean_num_strict(card.find_element(By.CSS_SELECTOR, ".detailbox-property-point").text)
-                s_area = clean_num_strict(card.find_element(By.CSS_SELECTOR, ".detailbox-property--col3 div:nth-child(2)").text)
-                
-                es_rent_man = info['rent_raw'] / 10000.0
-                if s_rent == es_rent_man and s_area == info['area']:
+                # 賃料の取得
+                s_rent = normalize_text(card.find_element(By.CSS_SELECTOR, ".detailbox-property-point").text).replace('万円', '')
+                # 面積の取得 (supタグを除去して「20.50m2」を「20.50m」にする)
+                area_el = card.find_element(By.CSS_SELECTOR, ".detailbox-property--col3 div:nth-child(2)")
+                s_area = driver.execute_script("""
+                    let el = arguments[0].cloneNode(true);
+                    el.querySelectorAll('sup').forEach(s => s.remove());
+                    return el.textContent;
+                """, area_el)
+                s_area = normalize_text(s_area).replace('m', '')
+
+                if s_rent == target_rent and s_area == target_area:
                     match_count += 1
             except: continue
     except: pass
