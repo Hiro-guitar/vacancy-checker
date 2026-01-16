@@ -38,3 +38,11 @@ jobs:
         with:
           name: debug-screenshots
           path: debug_*.png
+
+      - name: Upload Screenshots
+        uses: actions/upload-artifact@v4
+        if: always() # エラーが起きても必ず保存する
+        with:
+          name: suumo-screenshots
+          path: ./*.png
+          retention-days: 5 # 5日間保存
