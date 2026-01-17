@@ -243,38 +243,28 @@ def main():
                 print(f"✅ 調査対象(広告許可済): {name}")
 
                 # 1. 住所・面積・階数を取得（情報の更新を厳密に待機）
-                current_modal_name = ""
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
                 
-                for _ in range(40): # 最大約12秒待機
+                # 1. 住所・面積・階数を取得（情報が更新されるまで待機）
+                for _ in range(30):
                     try:
-                        # モーダル内のタイトル（物件名＋部屋番号）を取得
-                        # css-1x36n8t は住所のクラスなので、タイトル用のクラスを指定
-                        title_el = modal.find_element(By.CSS_SELECTOR, "h6.MuiTypography-subtitle1")
-                        current_modal_name = title_el.text.strip()
+                        addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
+                        raw_address = addr_el.text.strip() # 元の住所: 東京都新宿区西新宿３丁目5-15
                         
-                        # 重要：モーダル内の物件名が、今クリックした物件名(name)と一致するか確認
-                        if current_modal_name == name:
-                            # 住所要素を取得
-                            addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
-                            raw_address = addr_el.text.strip()
+                        if raw_address != last_modal_address:
+                            # 【ここを修正】extract_kanji_address を使って丁目までに変換
+                            address_val = extract_kanji_address(raw_address) 
+                            last_modal_address = raw_address # 判定用には元のフル住所を保存
                             
-                            # 面積も取得（まだ「--㎡」などのロード中表示でないか確認）
                             area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
+                            area_val_str = area_match.group(1) if area_match else ""
                             
-                            if raw_address and area_match:
-                                address_val = extract_kanji_address(raw_address)
-                                area_val_str = area_match.group(1)
-                                
-                                floor_match = re.search(r'地上(\d+)階', modal.text)
-                                floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
-                                
-                                # 名前が一致し、住所と面積が取れたら完了
-                                break
-                    except:
-                        pass
+                            floor_match = re.search(r'地上(\d+)階', modal.text)
+                            floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
+                            break
+                    except: pass
                     time.sleep(0.3)
 
                 # 2. 「築年月」を取得 (例: 2004/01 → 2004年1月)
