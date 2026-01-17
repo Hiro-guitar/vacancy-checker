@@ -187,21 +187,35 @@ def main():
                 # 1. モーダルが表示されたら、まず「広告可」タグをチェック
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                # --- [最速フィルタ] 広告可否の判定を最初に行う ---
+                # --- [修正点] 広告可タグが「中身」を含めて表示されるまで最大3秒待機 ---
+                try:
+                    # 「広告可」という文字を含む要素が現れるのを待つ
+                    WebDriverWait(driver, 3).until(
+                        lambda d: any(t.text in ["広告可", "広告可※"] for t in modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label"))
+                    )
+                except:
+                    # 5秒待ってもタグが出ない場合は本当に「広告不可」と判断
+                    print(f"⏭️ スキップ (広告タグなし): {name}")
+                    driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
+                    time.sleep(1)
+                    continue
+
+                # タグの再取得
                 tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
                 is_ad_ok = False
                 needs_check_tooltip = False
                 ad_tag_el = None
 
                 for tag in tags:
-                    if tag.text == "広告可":
+                    txt = tag.text.strip()
+                    if txt == "広告可":
                         is_ad_ok = True
                         break
-                    elif tag.text == "広告可※":
+                    elif txt == "広告可※":
                         needs_check_tooltip = True
                         ad_tag_el = tag
                         break
-                
+                                
                 # どちらのタグもなければ即終了
                 if not is_ad_ok and not needs_check_tooltip:
                     print(f"⏭️ スキップ (広告不可): {name}")
