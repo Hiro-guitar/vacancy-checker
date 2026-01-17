@@ -185,64 +185,60 @@ def main():
                 driver.execute_script("arguments[0].click();", item)
                 
                 # 1. モーダルが表示されたら、まず「広告可」タグをチェック
+                # 1. モーダル表示待機
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                # --- [修正点] 広告可タグが「中身」を含めて表示されるまで最大3秒待機 ---
-                try:
-                    # 「広告可」という文字を含む要素が現れるのを待つ
-                    WebDriverWait(driver, 3).until(
-                        lambda d: any(t.text in ["広告可", "広告可※"] for t in modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label"))
-                    )
-                except:
-                    # 5秒待ってもタグが出ない場合は本当に「広告不可」と判断
-                    print(f"⏭️ スキップ (広告タグなし): {name}")
-                    driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
-                    time.sleep(1)
-                    continue
-
-                # タグの再取得
-                tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
-                is_ad_ok = False
-                needs_check_tooltip = False
+                # --- [修正版] 判定フラグをこのスコープで完全に初期化 ---
+                current_ad_status = None # "OK", "CHECK_TOOLTIP", "NG" のいずれかを入れる
                 ad_tag_el = None
 
+                # 広告タグが表示されるまで少し待機（最大3秒）
+                time.sleep(1) 
+                
+                # モーダル内(modal.)のタグだけを厳密に取得
+                tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
+                
                 for tag in tags:
                     txt = tag.text.strip()
                     if txt == "広告可":
-                        is_ad_ok = True
+                        current_ad_status = "OK"
                         break
                     elif txt == "広告可※":
-                        needs_check_tooltip = True
+                        current_ad_status = "CHECK_TOOLTIP"
                         ad_tag_el = tag
                         break
-                                
-                # どちらのタグもなければ即終了
-                if not is_ad_ok and not needs_check_tooltip:
-                    print(f"⏭️ スキップ (広告不可): {name}")
+                
+                # 判定: OKでもCHECK_TOOLTIPでもなければ、即座に「NG」としてスキップ
+                if current_ad_status is None:
+                    print(f"⏭️ スキップ (広告不可・タグなし): {name}")
                     driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
                     time.sleep(1)
                     continue
 
-                # 「広告可※」の場合はツールチップでSUUMOを確認
-                if needs_check_tooltip:
+                # 2. 広告可※ の場合のツールチップ深掘り
+                if current_ad_status == "CHECK_TOOLTIP":
                     from selenium.webdriver.common.action_chains import ActionChains
+                    # 確実に要素へスクロールしてからホバー
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", ad_tag_el)
                     ActionChains(driver).move_to_element(ad_tag_el).perform()
-                    time.sleep(0.5) # 吹き出し待機
+                    time.sleep(0.8)
 
                     try:
+                        # 画面全体から今出ているツールチップを探す
                         tooltip = driver.find_element(By.CSS_SELECTOR, ".MuiTooltip-popper")
                         if "SUUMO賃貸" not in tooltip.text:
-                            print(f"⏭️ スキップ (広告可※/SUUMO不可): {name}")
+                            print(f"⏭️ スキップ (広告可※ですがSUUMO不可): {name}")
                             driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
                             time.sleep(1)
                             continue
                     except:
-                        # ツールチップが取れない場合も安全のためスキップ
+                        print(f"⚠️ ツールチップが読み取れなかったためスキップ: {name}")
                         driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
+                        time.sleep(1)
                         continue
                 
-                # --- [合格物件のみ] ここから詳細情報の取得を開始 ---
-                print(f"✅ 調査対象物件を確認: {name}")
+                # --- ここを通過した物件だけが「本物の調査対象」 ---
+                print(f"✅ 調査対象(広告許可済): {name}")
 
                 address_val = ""
                 area_val_str = ""
