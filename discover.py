@@ -184,13 +184,56 @@ def main():
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", item)
                 
-                # --- ここから書き換え ---
+                # 1. モーダルが表示されたら、まず「広告可」タグをチェック
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
+                # --- [最速フィルタ] 広告可否の判定を最初に行う ---
+                tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
+                is_ad_ok = False
+                needs_check_tooltip = False
+                ad_tag_el = None
+
+                for tag in tags:
+                    if tag.text == "広告可":
+                        is_ad_ok = True
+                        break
+                    elif tag.text == "広告可※":
+                        needs_check_tooltip = True
+                        ad_tag_el = tag
+                        break
+                
+                # どちらのタグもなければ即終了
+                if not is_ad_ok and not needs_check_tooltip:
+                    print(f"⏭️ スキップ (広告不可): {name}")
+                    driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
+                    time.sleep(1)
+                    continue
+
+                # 「広告可※」の場合はツールチップでSUUMOを確認
+                if needs_check_tooltip:
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    ActionChains(driver).move_to_element(ad_tag_el).perform()
+                    time.sleep(0.5) # 吹き出し待機
+
+                    try:
+                        tooltip = driver.find_element(By.CSS_SELECTOR, ".MuiTooltip-popper")
+                        if "SUUMO賃貸" not in tooltip.text:
+                            print(f"⏭️ スキップ (広告可※/SUUMO不可): {name}")
+                            driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
+                            time.sleep(1)
+                            continue
+                    except:
+                        # ツールチップが取れない場合も安全のためスキップ
+                        driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
+                        continue
+                
+                # --- [合格物件のみ] ここから詳細情報の取得を開始 ---
+                print(f"✅ 調査対象物件を確認: {name}")
+
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
-                
+                                
                 # 1. 住所・面積・階数を取得（情報が更新されるまで待機）
                 for _ in range(30):
                     try:
