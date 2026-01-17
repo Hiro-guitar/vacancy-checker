@@ -243,7 +243,7 @@ def main():
                 # --- ここまで ---
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
-                    send_discord(f"✨ 【お宝候補】他社掲載 {count}件\n物件: {name} {floor}\n条件: {rent_man}万 / {area_val}㎡")
+                    send_discord(f"✨ 【お宝候補】他社掲載 {count}件\n物件: {name} {floor_val_str}\n条件: {rent_man}万 / {area_val}㎡")
                     found_count += 1
 
                 driver.execute_script("""
