@@ -243,9 +243,18 @@ def main():
                 # --- ここまで ---
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
-                    send_discord(f"✨ 【お宝候補】他社掲載 {count}件\n物件: {name} {floor_val_str}\n条件: {rent_man}万 / {area_val}㎡")
+                    # 変数名を定義済みの正しいもの（_str付き）に修正
+                    # info['address'] を使うことで丁目までの短い住所を表示
+                    message = (
+                        f"✨ 【お宝候補】他社掲載 {count}件\n"
+                        f"物件: {name} ({floor_val_str})\n"
+                        f"場所: {info['address']}\n"
+                        f"条件: {rent_man}万 / {area_val_str} / {built_val}"
+                    )
+                    send_discord(message)
                     found_count += 1
 
+                # モーダルを閉じる
                 driver.execute_script("""
                     var closeBtn = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
                     if (closeBtn) closeBtn.closest('button').click();
@@ -254,7 +263,10 @@ def main():
 
             except Exception as e:
                 print(f"物件[{i}] スキップ: {e}")
-                driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                # エラー時も一応ESCキーでモーダルを閉じる試行
+                try:
+                    driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                except: pass
                 time.sleep(1)
 
         send_discord(f"✅ 調査完了。{found_count}件見つかりました。")
