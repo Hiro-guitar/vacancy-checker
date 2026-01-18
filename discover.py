@@ -302,6 +302,10 @@ def main():
                 # 5. SUUMOチェック実行
                 count = check_suumo(driver, info, i + 1)
 
+                # --- 追加: タブを閉じて戻ってきた後の安定化処理 ---
+                time.sleep(1) # ブラウザのコンテキストが復帰するのを待つ
+                driver.switch_to.window(driver.window_handles[0]) # 念のため再度メインウィンドウを指定
+
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
                     # メッセージの最後に \n\n を入れることで、次のメッセージとの間に隙間を作ります
