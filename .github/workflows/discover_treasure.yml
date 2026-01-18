@@ -1,7 +1,7 @@
 name: Discover Treasure Properties
 
 on:
-  workflow_dispatch: # 手動実行用ボタンを表示させる設定
+  workflow_dispatch:
 
 jobs:
   discover:
@@ -18,12 +18,10 @@ jobs:
         run: |
           pip install selenium requests chromedriver-autoinstaller
 
-      # --- ここから追加：日本語フォントのインストール ---
       - name: Install Japanese Fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
-      # --- ここまで ---
 
       - name: Run discovery
         run: python discover.py
@@ -32,17 +30,15 @@ jobs:
           ES_EMAIL: ${{ secrets.ES_EMAIL }}
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
 
-      - name: Upload Debug Artifacts
-        if: always()
+      # 成果物（スクショ）の保存設定
+      - name: Upload All Screenshots
         uses: actions/upload-artifact@v4
+        if: always() # 途中で止まっても、そこまでに撮れた画像を保存する
         with:
-          name: debug-screenshots
-          path: debug_*.png
-
-      - name: Upload Screenshots
-        uses: actions/upload-artifact@v4
-        if: always() # エラーが起きても必ず保存する
-        with:
-          name: suumo-screenshots
-          path: ./*.png
-          retention-days: 5 # 5日間保存
+          name: property-investigation-reports
+          path: |
+            debug_*.png
+            es_modal_*.png
+            suumo_*.png
+            evidence.png
+          retention-days: 5
