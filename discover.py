@@ -258,7 +258,7 @@ def main():
                 
                 print(f"⏳ 同期待機中: {name}")
 
-                for _ in range(50):  # 100ms * 50 = 最大5秒待機
+                for _ in range(50):  # 最大5秒待機
                     try:
                         # 1. 住所の取得
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
@@ -268,27 +268,40 @@ def main():
                         area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
                         current_area = area_match.group(1) if area_match else ""
 
-                        # 【重要】Chrome拡張と同じ判定ロジック
-                        # 「住所があり」「面積があり」「(住所か面積のどちらかが前回と違う)」場合にループを抜ける
-                        # ※同じマンションの別部屋対策として、物件名(name)のチェックも加えるとより鉄壁です
+                        # 判定条件：データが存在し、（初回 OR 住所変化 OR 面積変化）
                         if current_address and current_area:
-                            if (current_address != lastModalAddress) or (current_area != lastModalArea):
+                            if (lastModalAddress == "") or (current_address != lastModalAddress) or (current_area != lastModalArea):
                                 address_val = extract_kanji_address(current_address)
                                 area_val_str = current_area
                                 
-                                # 更新成功：前回の値を今回の値で上書き
-                                lastModalAddress = current_address
-                                lastModalArea = current_area
-                                
-                                # 階数の取得
                                 floor_match = re.search(r'地上(\d+)階', modal.text)
                                 floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
+                                
+                                # 次回比較用に保存
+                                lastModalAddress = current_address
+                                lastModalArea = current_area
                                 break
                     except:
                         pass
-                    time.sleep(0.1) # 100ms待機
+                    time.sleep(0.1)
                 
-                # 同期後に物件詳細スクショを撮る（拡張機能の挙動に近いタイミング）
+                # === 最終ガード：もし上記ループで確定できなかった場合の強制取得 ===
+                if not address_val:
+                    print(f"⚠️ 同期判定がタイムアウトしたため、現在の表示情報を強制取得します")
+                    try:
+                        # 今見えている要素をそのまま取得
+                        raw_addr = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t").text.strip()
+                        address_val = extract_kanji_address(raw_addr)
+                        
+                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
+                        area_val_str = area_match.group(1) if area_match else ""
+                        
+                        floor_match = re.search(r'地上(\d+)階', modal.text)
+                        floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
+                    except Exception as e:
+                        print(f"❌ 最終ガードでも取得に失敗: {e}")
+
+                # 物件詳細スクショ（最終ガード後なので、最悪でも何が映っていたか確認可能）
                 safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
                 driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
 
