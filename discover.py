@@ -242,6 +242,11 @@ def main():
                 # --- ここを通過した物件だけが「本物の調査対象」 ---
                 print(f"✅ 調査対象(広告許可済): {name}")
 
+                # 【追加】物件詳細モーダルのスクショを保存
+                # ファイル名に使用できない記号を除去
+                safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
+                driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
+
                 # 1. 住所・面積・階数を取得（情報の更新を厳密に待機）
                 address_val = ""
                 area_val_str = ""
