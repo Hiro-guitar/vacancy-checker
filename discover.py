@@ -248,29 +248,49 @@ def main():
                 driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
 
                 # 1. 住所・面積・階数を取得（情報の更新を厳密に待機）
+                # --- Chrome拡張互換：住所と面積の同期待ちロジック ---
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
+
+                # ループの外で定義した lastModalAddress, lastModalArea を更新していく
+                # ※ main() の冒頭で lastModalAddress = ""; lastModalArea = "" を定義しておいてください
                 
-                # 1. 住所・面積・階数を取得（情報が更新されるまで待機）
-                for _ in range(30):
+                print(f"⏳ 同期待機中: {name}")
+
+                for _ in range(50):  # 100ms * 50 = 最大5秒待機
                     try:
+                        # 1. 住所の取得
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
-                        raw_address = addr_el.text.strip() # 元の住所: 東京都新宿区西新宿３丁目5-15
+                        current_address = addr_el.text.strip()
                         
-                        if raw_address != last_modal_address:
-                            # 【ここを修正】extract_kanji_address を使って丁目までに変換
-                            address_val = extract_kanji_address(raw_address) 
-                            last_modal_address = raw_address # 判定用には元のフル住所を保存
-                            
-                            area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
-                            area_val_str = area_match.group(1) if area_match else ""
-                            
-                            floor_match = re.search(r'地上(\d+)階', modal.text)
-                            floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
-                            break
-                    except: pass
-                    time.sleep(0.3)
+                        # 2. 面積の取得
+                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
+                        current_area = area_match.group(1) if area_match else ""
+
+                        # 【重要】Chrome拡張と同じ判定ロジック
+                        # 「住所があり」「面積があり」「(住所か面積のどちらかが前回と違う)」場合にループを抜ける
+                        # ※同じマンションの別部屋対策として、物件名(name)のチェックも加えるとより鉄壁です
+                        if current_address and current_area:
+                            if (current_address != lastModalAddress) or (current_area != lastModalArea):
+                                address_val = extract_kanji_address(current_address)
+                                area_val_str = current_area
+                                
+                                # 更新成功：前回の値を今回の値で上書き
+                                lastModalAddress = current_address
+                                lastModalArea = current_area
+                                
+                                # 階数の取得
+                                floor_match = re.search(r'地上(\d+)階', modal.text)
+                                floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
+                                break
+                    except:
+                        pass
+                    time.sleep(0.1) # 100ms待機
+                
+                # 同期後に物件詳細スクショを撮る（拡張機能の挙動に近いタイミング）
+                safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
+                driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
 
                 # 2. 「築年月」を取得 (例: 2004/01 → 2004年1月)
                 built_val = ""
