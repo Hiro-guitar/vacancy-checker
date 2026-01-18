@@ -57,28 +57,29 @@ def extract_kanji_address(text):
     return text # 丁目がない場合はそのまま
 
 def check_suumo(driver, info, index):
-    # 検索語句を組み立て (住所 築年月 階建て 面積 賃料)
-    # 例: "東京都練馬区... 1998年4月 4階建 26m 9万"
+    # 検索語句を組み立て
     search_word = f"{info['address']} {info['built']} {info['floors']} {info['area']} {info['rent']}"
     search_word = search_word.replace('㎡', 'm')
     
     encoded_word = urllib.parse.quote(search_word)
-    # 高精度な一覧表示用エンドポイントを使用
-    suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC011/?ar=030&bs=040&kskbn=01&fw={encoded_word}"
+    # URLの末尾に &pc=100 を追加して100件表示に変更
+    suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC011/?ar=030&bs=040&kskbn=01&fw={encoded_word}&pc=100"
     
     main_window = driver.current_window_handle
     driver.execute_script("window.open('');")
     driver.switch_to.window(driver.window_handles[-1])
     driver.get(suumo_url)
-    time.sleep(3) # 読み込み待機
+    
+    # 100件表示はデータ量が増えるため、待機時間を少し長め（3秒→4秒）に調整
+    time.sleep(4) 
 
-    # 個別スクショ保存（物件名を含める）
+    # 個別スクショ保存
     safe_name = re.sub(r'[\\/:*?"<>|]', '', info['name'])
     driver.save_screenshot(f"suumo_{index}_{safe_name}.png")
 
     match_count = 0
     try:
-        # 拡張機能と同じく「広告物件」のみをターゲットにする
+        # 100件の中から「広告物件」をすべてカウント
         cards = driver.find_elements(By.CSS_SELECTOR, ".property.property--highlight")
         target_rent = normalize_text(info['rent']).replace('万', '')
         target_area = normalize_text(info['area']).replace('m', '')
