@@ -38,6 +38,7 @@ jobs:
           name: property-investigation-reports
           path: |
             debug_*.png
+            full_scan_*.png
             es_modal_*.png
             suumo_*.png
             evidence.png
