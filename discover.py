@@ -111,6 +111,7 @@ def main():
     send_discord("🔍 調査を開始します")
     
     last_modal_address = ""
+    lastModalArea = "" 
     
     try:
         driver.get("https://rent.es-square.net/bukken/chintai/search?jusho=13%2B101&jusho=13%2B102&jusho=13%2B103&jusho=13%2B104&jusho=13%2B105&jusho=13%2B106&jusho=13%2B107&jusho=13%2B108&jusho=13%2B109&jusho=13%2B110&jusho=13%2B111&jusho=13%2B112&jusho=13%2B113&jusho=13%2B114&jusho=13%2B115&jusho=13%2B116&jusho=13%2B120&jusho=13%2B203&jusho=13%2B204&jusho=13%2B229&jusho=13%2B211&jusho=13%2B210&search_madori_code2=2&search_madori_code2=1&kodawari=separatedBathAndToilet&is_exclude_moshikomi_exist=true&order=one_network_keisai_kaishi_time.desc&p=1&items_per_page=30")
@@ -253,9 +254,6 @@ def main():
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
-
-                # ループの外で定義した lastModalAddress, lastModalArea を更新していく
-                # ※ main() の冒頭で lastModalAddress = ""; lastModalArea = "" を定義しておいてください
                 
                 print(f"⏳ 同期待機中: {name}")
 
@@ -265,9 +263,13 @@ def main():
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
                         current_address = addr_el.text.strip()
                         
-                        # 2. 面積の取得
-                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
-                        current_area = area_match.group(1) if area_match else ""
+                        # 2. 面積の取得と整形 (例: 24.10㎡ -> 24.1m)
+                        area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
+                        if area_match:
+                            area_float = float(area_match.group(1))
+                            current_area = f"{area_float:g}m" # 最短表記(24.1)にしてmを付与
+                        else:
+                            current_area = ""
 
                         # 判定条件：データが存在し、（初回 OR 住所変化 OR 面積変化）
                         if current_address and current_area:
@@ -290,19 +292,21 @@ def main():
                 if not address_val:
                     print(f"⚠️ 同期判定がタイムアウトしたため、現在の表示情報を強制取得します")
                     try:
-                        # 今見えている要素をそのまま取得
                         raw_addr = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t").text.strip()
                         address_val = extract_kanji_address(raw_addr)
                         
-                        area_match = re.search(r'(\d+(\.\d+)?㎡)', modal.text)
-                        area_val_str = area_match.group(1) if area_match else ""
+                        # 面積の再取得・整形
+                        area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
+                        if area_match:
+                            area_float = float(area_match.group(1))
+                            area_val_str = f"{area_float:g}m"
                         
                         floor_match = re.search(r'地上(\d+)階', modal.text)
                         floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
                     except Exception as e:
                         print(f"❌ 最終ガードでも取得に失敗: {e}")
 
-                # 物件詳細スクショ（最終ガード後なので、最悪でも何が映っていたか確認可能）
+                # 物件詳細スクショ
                 safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
                 driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
 
