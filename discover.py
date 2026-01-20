@@ -161,12 +161,15 @@ def main():
         found_count = 0
         for i in range(len(items)):
             try:
+                # 毎回最新のリストを取得して要素のズレを防ぐ
                 current_items = driver.find_elements(By.XPATH, items_xpath)
                 item = current_items[i]
                 
+                # 物件名を取得
                 name = item.find_element(By.CSS_SELECTOR, 'p.css-1bkh2wx').text.strip()
                 rent_raw = 0.0
                 
+                # リスト上の賃料を取得
                 list_boxes = driver.find_elements(By.CSS_SELECTOR, '.MuiBox-root.css-1t7sidb')
                 for box in list_boxes:
                     try:
@@ -182,25 +185,30 @@ def main():
                             if rent_raw > 0: break 
                     except: continue
 
+                # --- 【修正】クリック動作の安定化 ---
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", item)
-                time.sleep(0.5)
+                time.sleep(0.8) # スクロール後の安定待機
                 driver.execute_script("arguments[0].click();", item)
                 
-                # 1. モーダル表示待機
-                modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
+                # 1. モーダルの「外枠」が出るのを待つ
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb'))
+                )
                 
-                # --- 【原因究明用】まず何よりも先にスクショを撮る ---
-                # 広告タグの有無に関係なく、開いた瞬間の状態を保存します
-                time.sleep(0.5) # タグの描画待ち
+                # 2. 【重要】1件目対策：中身がロードされるまでしっかり待つ
+                # ロード中のぐるぐる対策として一律2.5秒待機（ここが短いと「読込中...」でスクショされます）
+                time.sleep(2.5) 
+
+                # 【原因調査用スクショ】全物件撮影
                 safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
                 driver.save_screenshot(f"full_scan_{i+1}_{safe_name}.png")
                 
-                # --- 以降、通常の判定処理 ---
+                modal = driver.find_element(By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')
                 bukken_url = driver.current_url
+                
+                # --- 広告タグ判定 ---
                 current_ad_status = None
                 ad_tag_el = None
-
-                # モーダル内のタグを再取得
                 tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
                 
                 for tag in tags:
@@ -213,107 +221,72 @@ def main():
                         ad_tag_el = tag
                         break
                 
-                # 判定: 対象外ならここで終了（ただしスクショは既に撮ってある）
+                # タグがない場合、モーダルを閉じて次の物件へ
                 if current_ad_status is None:
-                    print(f"⏭️ スキップ (広告不可・タグなし判定): {name}")
-                    # モーダルを閉じる
-                    driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
-                    time.sleep(1)
+                    print(f"⏭️ スキップ (広告不可): {name}")
+                    driver.execute_script("""
+                        var closeBtn = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
+                        if (closeBtn) closeBtn.closest('button').click();
+                    """)
+                    # 【重要】モーダルが「消える」のを待機
+                    WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
+                    time.sleep(0.5)
                     continue
                     
-                # 2. 広告可※ の場合のツールチップ深掘り
+                # 広告可※ の場合のツールチップ深掘り
                 if current_ad_status == "CHECK_TOOLTIP":
                     from selenium.webdriver.common.action_chains import ActionChains
-                    # 確実に要素へスクロールしてからホバー
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", ad_tag_el)
                     ActionChains(driver).move_to_element(ad_tag_el).perform()
-                    time.sleep(0.8)
-
+                    time.sleep(1.0)
                     try:
-                        # 画面全体から今出ているツールチップを探す
                         tooltip = driver.find_element(By.CSS_SELECTOR, ".MuiTooltip-popper")
                         if "SUUMO賃貸" not in tooltip.text:
-                            print(f"⏭️ スキップ (広告可※ですがSUUMO不可): {name}")
+                            print(f"⏭️ スキップ (SUUMO不可): {name}")
                             driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
-                            time.sleep(1)
+                            WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                             continue
                     except:
-                        print(f"⚠️ ツールチップが読み取れなかったためスキップ: {name}")
                         driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
-                        time.sleep(1)
+                        WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                         continue
                 
-                # --- ここを通過した物件だけが「本物の調査対象」 ---
-                print(f"✅ 調査対象(広告許可済): {name}")
-
-                # 【追加】物件詳細モーダルのスクショを保存
-                # ファイル名に使用できない記号を除去
-                safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
+                # --- 調査対象の確定 ---
+                print(f"✅ 調査対象: {name}")
                 driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
 
-                # 1. 住所・面積・階数を取得（情報の更新を厳密に待機）
-                # --- Chrome拡張互換：住所と面積の同期待ちロジック ---
+                # 住所・面積・階数を取得（既存の同期待ちロジック）
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
                 
-                print(f"⏳ 同期待機中: {name}")
-
-                for _ in range(50):  # 最大5秒待機
+                for _ in range(50):
                     try:
-                        # 1. 住所の取得
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
                         current_address = addr_el.text.strip()
-                        
-                        # 2. 面積の取得と整形 (例: 24.10㎡ -> 24.1m)
                         area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
                         if area_match:
                             area_float = float(area_match.group(1))
-                            current_area = f"{area_float:g}m" # 最短表記(24.1)にしてmを付与
-                        else:
-                            current_area = ""
+                            current_area = f"{area_float:g}m"
+                        else: current_area = ""
 
-                        # 判定条件：データが存在し、（初回 OR 住所変化 OR 面積変化）
                         if current_address and current_area:
-                            if (lastModalAddress == "") or (current_address != lastModalAddress) or (current_area != lastModalArea):
+                            if (last_modal_address == "") or (current_address != last_modal_address) or (current_area != lastModalArea):
                                 address_val = extract_kanji_address(current_address)
                                 area_val_str = current_area
-                                
                                 floor_match = re.search(r'地上(\d+)階', modal.text)
                                 floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
-                                
-                                # 次回比較用に保存
-                                lastModalAddress = current_address
+                                last_modal_address = current_address
                                 lastModalArea = current_area
                                 break
-                    except:
-                        pass
+                    except: pass
                     time.sleep(0.1)
                 
-                # === 最終ガード：もし上記ループで確定できなかった場合の強制取得 ===
-                if not address_val:
-                    print(f"⚠️ 同期判定がタイムアウトしたため、現在の表示情報を強制取得します")
-                    try:
-                        raw_addr = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t").text.strip()
-                        address_val = extract_kanji_address(raw_addr)
-                        
-                        # 面積の再取得・整形
-                        area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
-                        if area_match:
-                            area_float = float(area_match.group(1))
-                            area_val_str = f"{area_float:g}m"
-                        
-                        floor_match = re.search(r'地上(\d+)階', modal.text)
-                        floor_val_str = f"{floor_match.group(1)}階建" if floor_match else ""
-                    except Exception as e:
-                        print(f"❌ 最終ガードでも取得に失敗: {e}")
-
-                # 物件詳細スクショ
-                safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
-                driver.save_screenshot(f"es_modal_{i+1}_{safe_name}.png")
-
-                # 2. 「築年月」を取得 (例: 2004/01 → 2004年1月)
-                built_val = ""
+                # SUUMOチェック
+                rent_man_str = f"{rent_raw / 10000:g}万"
+                info = {"name": name, "address": address_val, "built": "", "floors": floor_val_str, "area": area_val_str, "rent": rent_man_str}
+                
+                # 築年月の取得
                 try:
                     built_raw = driver.execute_script("""
                         return Array.from(document.querySelectorAll('div.MuiGrid-root'))
@@ -321,61 +294,41 @@ def main():
                             .nextElementSibling.innerText.trim();
                     """)
                     m = re.match(r'(\d{4})/(\d{1,2})', built_raw)
-                    built_val = f"{m.group(1)}年{int(m.group(2))}月" if m else built_raw
+                    info["built"] = f"{m.group(1)}年{int(m.group(2))}月" if m else built_raw
                 except: pass
 
-                # 3. 賃料を「9万」のような万円表記に変換
-                rent_man_str = f"{rent_raw / 10000:g}万"
-
-                # 4. SUUMOに渡すための情報セット(info)
-                info = {
-                    "name": name,
-                    "address": address_val, # ← 丁目までの住所が入る
-                    "built": built_val,
-                    "floors": floor_val_str,
-                    "area": area_val_str,
-                    "rent": rent_man_str
-                }
-
-                print(f"🧐 [{i+1}] 照合中: {name} ({address_val} / {rent_man_str} / {built_val})")
-
-                # 5. SUUMOチェック実行
                 count = check_suumo(driver, info, i + 1)
-
-                # --- 追加: タブを閉じて戻ってきた後の安定化処理 ---
-                time.sleep(1) # ブラウザのコンテキストが復帰するのを待つ
-                driver.switch_to.window(driver.window_handles[0]) # 念のため再度メインウィンドウを指定
+                time.sleep(1)
+                driver.switch_to.window(driver.window_handles[0])
 
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
-                    # メッセージの最後に \n\n を入れることで、次のメッセージとの間に隙間を作ります
-                    # また、各項目の頭に絵文字を追加し、物件名を太字にするなどの装飾も可能です
                     message = (
-                        f"━━━━━━━━━━━━━━━\n" # 区切り線
+                        f"━━━━━━━━━━━━━━━\n"
                         f"✨ **【お宝候補】他社掲載 {count}件**\n\n"
                         f"🏠 **物件名**: {name}\n"
-                        f"🏢 **階数**: {floor_val_str}\n"
-                        f"📍 **場所**: {info['address']}\n"
-                        f"💰 **条件**: {rent_man}万 / {area_val_str} / {built_val}\n\n"
+                        f"💰 **条件**: {rent_man}万 / {area_val_str} / {info['built']}\n"
                         f"🔗 **詳細URL**\n{bukken_url}\n"
                         f"━━━━━━━━━━━━━━━\n"
-                        f"\n" # ← これが次のメッセージとの間の「ゆとり」になります
                     )
                     send_discord(message)
                     found_count += 1
 
-                # モーダルを閉じる
+                # --- 【最重要】モーダルを確実に閉じて「消える」のを待つ ---
                 driver.execute_script("""
                     var closeBtn = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
                     if (closeBtn) closeBtn.closest('button').click();
                 """)
-                time.sleep(1.2)
+                
+                # これがないと次の物件をクリックするときに前の物件が残ってしまう
+                WebDriverWait(driver, 10).until(
+                    EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb'))
+                )
+                time.sleep(0.8) # 画面が安定するまで少し待機
 
             except Exception as e:
                 print(f"物件[{i}] スキップ: {e}")
-                # エラー時も一応ESCキーでモーダルを閉じる試行
-                try:
-                    driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                try: driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
                 except: pass
                 time.sleep(1)
 
