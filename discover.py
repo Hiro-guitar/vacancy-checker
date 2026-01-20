@@ -259,11 +259,24 @@ def main():
                 address_val = ""
                 area_val_str = ""
                 floor_val_str = ""
+                room_floor_num = "" 
                 
                 for _ in range(50):
                     try:
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
                         current_address = addr_el.text.strip()
+
+                        # 所在階の抽出ロジックを追加
+                        # 「12階(地上14階)」から「12」を取得
+                        floor_info_text = modal.text
+                        room_floor_match = re.search(r'(\d+)階\(地上\d+階\)', floor_info_text)
+                        if room_floor_match:
+                            room_floor_num = room_floor_match.group(1)
+                        
+                        # 建物全体の階数（地上14階建）
+                        total_floor_match = re.search(r'地上(\d+)階', floor_info_text)
+                        floor_val_str = f"{total_floor_match.group(1)}階建" if total_floor_match else ""
+
                         area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
                         if area_match:
                             area_float = float(area_match.group(1))
@@ -284,7 +297,15 @@ def main():
                 
                 # SUUMOチェック
                 rent_man_str = f"{rent_raw / 10000:g}万"
-                info = {"name": name, "address": address_val, "built": "", "floors": floor_val_str, "area": area_val_str, "rent": rent_man_str}
+                info = {
+                    "name": name, 
+                    "address": address_val, 
+                    "built": "", 
+                    "floors": floor_val_str, 
+                    "room_floor": room_floor_num, # 追加
+                    "area": area_val_str, 
+                    "rent": rent_man_str
+                }
                 
                 # 築年月の取得
                 try:
