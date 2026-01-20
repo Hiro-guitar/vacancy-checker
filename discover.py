@@ -189,17 +189,18 @@ def main():
                 # 1. モーダル表示待機
                 modal = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                 
-                # --- 物件詳細URLをこの時点のブラウザのURLから取得 ---
-                bukken_url = driver.current_url
+                # --- 【原因究明用】まず何よりも先にスクショを撮る ---
+                # 広告タグの有無に関係なく、開いた瞬間の状態を保存します
+                time.sleep(0.5) # タグの描画待ち
+                safe_name = re.sub(r'[\\/:*?"<>|]', '', name)
+                driver.save_screenshot(f"full_scan_{i+1}_{safe_name}.png")
                 
-                # --- 判定フラグをこのスコープで完全に初期化 ---
-                current_ad_status = None # "OK", "CHECK_TOOLTIP", "NG" のいずれかを入れる
+                # --- 以降、通常の判定処理 ---
+                bukken_url = driver.current_url
+                current_ad_status = None
                 ad_tag_el = None
 
-                # 広告タグが表示されるまで少し待機（最大3秒）
-                time.sleep(1) 
-                
-                # モーダル内(modal.)のタグだけを厳密に取得
+                # モーダル内のタグを再取得
                 tags = modal.find_elements(By.CSS_SELECTOR, ".eds-tag__label")
                 
                 for tag in tags:
@@ -212,13 +213,14 @@ def main():
                         ad_tag_el = tag
                         break
                 
-                # 判定: OKでもCHECK_TOOLTIPでもなければ、即座に「NG」としてスキップ
+                # 判定: 対象外ならここで終了（ただしスクショは既に撮ってある）
                 if current_ad_status is None:
-                    print(f"⏭️ スキップ (広告不可・タグなし): {name}")
+                    print(f"⏭️ スキップ (広告不可・タグなし判定): {name}")
+                    # モーダルを閉じる
                     driver.execute_script("document.querySelector('.MuiBox-root.css-1xhj18k button').click();")
                     time.sleep(1)
                     continue
-
+                    
                 # 2. 広告可※ の場合のツールチップ深掘り
                 if current_ad_status == "CHECK_TOOLTIP":
                     from selenium.webdriver.common.action_chains import ActionChains
