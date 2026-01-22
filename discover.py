@@ -62,6 +62,9 @@ def check_suumo(driver, info, index):
     search_word = search_word.replace('㎡', 'm')
     
     encoded_word = urllib.parse.quote(search_word)
+
+    # 所在階の指定を追加 (&ek=数字)
+    floor_param = f"&ek={info['room_floor']}" if info['room_floor'] else ""
     # URLの末尾に &pc=100 を追加して100件表示に変更
     suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC011/?ar=030&bs=040&kskbn=01&fw={encoded_word}&pc=100"
     
