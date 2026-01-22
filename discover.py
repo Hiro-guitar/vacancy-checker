@@ -235,6 +235,17 @@ def main():
                     WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
                     time.sleep(0.5)
                     continue
+
+                # レオパレス物件を排除
+                if "レオパレス" in name:
+                    print(f"⏭️ スキップ (レオパレス排除): {name}")
+                    driver.execute_script("""
+                        var closeBtn = document.querySelector('.MuiBox-root.css-1xhj18k svg[data-testid="CloseIcon"]');
+                        if (closeBtn) closeBtn.closest('button').click();
+                    """)
+                    WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.MuiBox-root.css-ne16qb')))
+                    time.sleep(0.5)
+                    continue
                     
                 # 広告可※ の場合のツールチップ深掘り
                 if current_ad_status == "CHECK_TOOLTIP":
