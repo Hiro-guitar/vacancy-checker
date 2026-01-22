@@ -57,15 +57,13 @@ def extract_kanji_address(text):
     return text # 丁目がない場合はそのまま
 
 def check_suumo(driver, info, index):
-    # 検索語句を組み立て
-    search_word = f"{info['address']} {info['built']} {info['floors']} {info['area']} {info['rent']}"
-    search_word = search_word.replace('㎡', 'm')
+    # 1. 検索ワードの取得を info['fw'] に変更
+    search_word = info.get('fw', "")
     
+    # 2. URLエンコード（シンプルに実施）
     encoded_word = urllib.parse.quote(search_word)
 
-    # 所在階の指定を追加 (&ek=数字)
-    floor_param = f"&ek={info['room_floor']}" if info['room_floor'] else ""
-    # URLの末尾に &pc=100 を追加して100件表示に変更
+    # 3. 所在階パラメータ(floor_param)を削除し、fwのみのURLに修正
     suumo_url = f"https://suumo.jp/jj/chintai/ichiran/FR301FC011/?ar=030&bs=040&kskbn=01&fw={encoded_word}&pc=100"
     
     main_window = driver.current_window_handle
@@ -73,8 +71,8 @@ def check_suumo(driver, info, index):
     driver.switch_to.window(driver.window_handles[-1])
     driver.get(suumo_url)
     
-    # 100件表示はデータ量が増えるため、待機時間を少し長め（3秒→4秒）に調整
-    time.sleep(4) 
+    # 100件表示はデータ量が増えるため、3秒待機
+    time.sleep(3) 
 
     # 個別スクショ保存
     safe_name = re.sub(r'[\\/:*?"<>|]', '', info['name'])
@@ -280,16 +278,17 @@ def main():
                         addr_el = modal.find_element(By.CSS_SELECTOR, "div.MuiBox-root.css-1x36n8t")
                         current_address = addr_el.text.strip()
 
-                        # 所在階の抽出ロジックを追加
-                        # 「12階(地上14階)」から「12」を取得
+                        # 【修正】「12階(地上14階)」から「12階」と「14階建」をそれぞれ抽出
                         floor_info_text = modal.text
-                        room_floor_match = re.search(r'(\d+)階\(地上\d+階\)', floor_info_text)
+                        # 所在階：カッコの前の数字＋階
+                        room_floor_match = re.search(r'(\d+)階\(地上', floor_info_text)
                         if room_floor_match:
-                            room_floor_num = room_floor_match.group(1)
+                            room_floor_num = f"{room_floor_match.group(1)}階"
                         
-                        # 建物全体の階数（地上14階建）
+                        # 建物階数：地上◯階の数字＋階建
                         total_floor_match = re.search(r'地上(\d+)階', floor_info_text)
-                        floor_val_str = f"{total_floor_match.group(1)}階建" if total_floor_match else ""
+                        if total_floor_match:
+                            floor_val_str = f"{total_floor_match.group(1)}階建"
 
                         area_match = re.search(r'(\d+(\.\d+)?)(?=㎡)', modal.text)
                         if area_match:
@@ -332,18 +331,21 @@ def main():
                     info["built"] = f"{m.group(1)}年{int(m.group(2))}月" if m else built_raw
                 except: pass
 
+                # 【重要】SUUMO検索キーワード(fw)をここで組み立てる
+                # 形式：住所 築年月 所在階 建物階数 面積 賃料
+                info['fw'] = f"{info['address']} {info['built']} {info['room_floor']} {info['floors']} {info['area']} {info['rent']}"
+
                 count = check_suumo(driver, info, i + 1)
                 time.sleep(1)
                 driver.switch_to.window(driver.window_handles[0])
 
                 if count <= 1:
                     rent_man = rent_raw / 10000.0
-                    # メッセージ内に「階数」と「場所」を復活させました
                     message = (
                         f"━━━━━━━━━━━━━━━\n"
                         f"✨ **【お宝候補】他社掲載 {count}件**\n\n"
                         f"🏠 **物件名**: {name}\n"
-                        f"🏢 **階数**: {floor_val_str}\n"
+                        f"🏢 **階数**: {info['room_floor']}（{info['floors']}）\n"
                         f"📍 **場所**: {address_val}\n"
                         f"💰 **条件**: {rent_man}万 / {area_val_str} / {info['built']}\n\n"
                         f"🔗 **詳細URL**\n{bukken_url}\n"
