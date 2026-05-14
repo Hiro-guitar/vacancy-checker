@@ -28,7 +28,28 @@ def create_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-blink-features=AutomationControlled')
     options.add_argument('--window-size=1280,1024')
-    return webdriver.Chrome(options=options)
+    # いえらぶBBが 403 で弾くため、リアルブラウザに偽装する設定を追加。
+    # User-Agent を最新の Chrome に、自動化フラグを排除、言語を ja-JP に。
+    options.add_argument(
+        'user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/130.0.0.0 Safari/537.36'
+    )
+    options.add_argument('--lang=ja-JP,ja')
+    options.add_argument('--accept-lang=ja-JP,ja;q=0.9,en;q=0.8')
+    options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    driver = webdriver.Chrome(options=options)
+    # navigator.webdriver = undefined にして bot 検知を回避
+    try:
+        driver.execute_cdp_cmd(
+            'Page.addScriptToEvaluateOnNewDocument',
+            {'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'}
+        )
+    except Exception:
+        pass
+    return driver
 
 # === 初期準備 ===
 os.makedirs("screenshots", exist_ok=True)
