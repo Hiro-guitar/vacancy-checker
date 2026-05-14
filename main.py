@@ -238,6 +238,18 @@ def check_itandi(driver, url, row_num):
     return not has_open
 
 def login_ielove(driver):
+    # いえらぶBB は Referer なしの直接アクセスを 403 で弾くため、CDP で
+    # すべてのリクエストに Referer を付与する。Chrome 拡張「いえらぶBB
+    # リファラー修正」と同じ戦略 (declarativeNetRequest で Referer set)。
+    try:
+        driver.execute_cdp_cmd('Network.enable', {})
+        driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+            'headers': {'Referer': 'https://bb.ielove.jp/ielovebb/rent/index/'}
+        })
+        print("  [ielove] Referer ヘッダーを設定 (https://bb.ielove.jp/ielovebb/rent/index/)")
+    except Exception as e:
+        print(f"  [ielove] Referer 設定失敗 (継続): {type(e).__name__}: {e}")
+
     for row in all_rows:
         url = row[URL_COL - 1].strip()
         if "bb.ielove.jp" not in url:
