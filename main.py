@@ -394,6 +394,21 @@ def check_ielove(driver, url, row_num):
             EC.presence_of_element_located((By.CSS_SELECTOR, "table.mar-top-12.detail-info.leasing-detail-info"))
         )
     except Exception:
+        # 「既に掲載が終了した物件です。」のページが返ってきている場合は
+        # 判定不能ではなく明示的に「掲載終了」として扱う (募集終了として
+        # ステータス更新、空欄+終了日時 記録の流れに乗る)
+        try:
+            page_text = driver.page_source or ""
+        except Exception:
+            page_text = ""
+        if "既に掲載が終了した物件" in page_text or "掲載が終了" in page_text:
+            screenshot_path = f"screenshots/ielove_row_{row_num}.png"
+            try:
+                driver.save_screenshot(screenshot_path)
+            except Exception:
+                pass
+            print(f"📌 Row {row_num} IELBB → 掲載終了物件（ページ削除済み）{screenshot_path}")
+            return True  # 募集終了扱い (process_rows 側で status="" + ENDED 記録される)
         print(f"⚠ Row {row_num} IELBB → 要素の表示待ちタイムアウト")
     time.sleep(1)
     app_elems = driver.find_elements(By.CSS_SELECTOR, "span.exists_application_for_confirm")
@@ -406,6 +421,15 @@ def check_ielove(driver, url, row_num):
     elif rent_elems:
         return False
     else:
+        # 念のため: タイムアウトは抜けたが申込/募集要素どちらも無い場合、
+        # 掲載終了メッセージが入っているかもう一度チェック
+        try:
+            page_text = driver.page_source or ""
+        except Exception:
+            page_text = ""
+        if "既に掲載が終了した物件" in page_text or "掲載が終了" in page_text:
+            print(f"📌 Row {row_num} IELBB → 掲載終了物件（ページ削除済み）")
+            return True
         print(f"⚠ Row {row_num} IELBB → 判定不能")
         return True
 
