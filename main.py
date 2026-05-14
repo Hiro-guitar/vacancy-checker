@@ -238,9 +238,41 @@ def check_itandi(driver, url, row_num):
     return not has_open
 
 def login_ielove(driver):
+    # Selenium とは別経路 (requests) で 403 の原因を切り分け診断。
+    # Selenium だと leak される情報が多くてサーバ判定が変わる可能性があるため、
+    # シンプルな HTTP リクエストでも同様の 403 になるかを確認する。
+    try:
+        import requests
+        common_headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+        }
+        diagnostics = [
+            ('top no-referer', 'https://bb.ielove.jp/', {}),
+            ('login no-referer', 'https://bb.ielove.jp/ielovebb/login/login/', {}),
+            ('login + ref=index', 'https://bb.ielove.jp/ielovebb/login/login/',
+                {'Referer': 'https://bb.ielove.jp/ielovebb/rent/index/'}),
+            ('login + ref=top', 'https://bb.ielove.jp/ielovebb/login/login/',
+                {'Referer': 'https://bb.ielove.jp/'}),
+        ]
+        for label, diag_url, extra_h in diagnostics:
+            try:
+                r = requests.get(diag_url, headers={**common_headers, **extra_h},
+                                 timeout=15, allow_redirects=False)
+                server = r.headers.get('Server', '?')
+                cf_ray = r.headers.get('CF-Ray', '')
+                location = r.headers.get('Location', '')
+                body_head = (r.text[:80] if r.text else '').replace('\n', ' ')
+                print(f"  [ielove diag] {label}: status={r.status_code} server={server} cf-ray={cf_ray} loc={location[:60]} body={body_head}")
+            except Exception as ex:
+                print(f"  [ielove diag] {label}: ERROR {type(ex).__name__} {ex}")
+    except Exception as e:
+        print(f"  [ielove diag] 全体例外: {type(e).__name__} {e}")
+
     # いえらぶBB は Referer なしの直接アクセスを 403 で弾くため、CDP で
-    # すべてのリクエストに Referer を付与する。Chrome 拡張「いえらぶBB
-    # リファラー修正」と同じ戦略 (declarativeNetRequest で Referer set)。
+    # すべてのリクエストに Referer を付与する。
     try:
         driver.execute_cdp_cmd('Network.enable', {})
         driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
