@@ -1,0 +1,15 @@
+# 機密値や Mac ローカル固有のものは除外
+.env
+run_check.sh
+
+# Python venv
+venv/
+__pycache__/
+*.pyc
+
+# 実行時の生成物
+logs/
+screenshots/
+
+# 認証情報 JSON (Google Cloud から発行されたサービスアカウント鍵)
+*-project-*.json

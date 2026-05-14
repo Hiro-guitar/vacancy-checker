@@ -1,0 +1,83 @@
+#!/bin/bash
+# vacancy-checker を Mac の cron から実行するためのラッパースクリプト
+#
+# 用途:
+#   - GitHub Actions では IP 拒否されるサービス (いえらぶBB) を、
+#     家庭 IP の Mac から定期実行する
+#
+# セットアップ:
+#   1. このファイルを run_check.sh としてコピー
+#        cp run_check.sh.example run_check.sh
+#        chmod +x run_check.sh
+#   2. .env.example を .env としてコピーして値を埋める
+#        cp .env.example .env
+#        nano .env
+#   3. SCRIPT_DIR と GSPREAD_JSON_PATH をご自身のパスに書き換える
+#   4. crontab -e で次の1行を追加:
+#        5 * * * * /Users/hirokinishimura/Desktop/vacancy-checker/run_check.sh
+#
+# ログ: ./logs/ielove_YYYY-MM-DD.log に追記される
+#       7日以上前のログは自動削除
+
+set -u
+
+# ── 設定 ────────────────────────────────────
+SCRIPT_DIR="/Users/hirokinishimura/Desktop/vacancy-checker"
+GSPREAD_JSON_PATH="/Users/hirokinishimura/Desktop/vacancy-checker-project-4f6fbd964c08.json"
+SERVICES_TO_RUN="ielove"  # Mac では いえらぶだけ (ES/itandi は GitHub Actions 側)
+# ────────────────────────────────────────────
+
+cd "$SCRIPT_DIR"
+
+# venv を activate
+# shellcheck disable=SC1091
+source venv/bin/activate
+
+# .env から環境変数読み込み (IELOVE_ID, IELOVE_PASSWORD, SPREADSHEET_ID, DISCORD_WEBHOOK_URL等)
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
+# GSPREAD_JSON は JSON 全体を環境変数化 (改行込みなので別ファイル読み込み)
+if [ -f "$GSPREAD_JSON_PATH" ]; then
+    export GSPREAD_JSON
+    GSPREAD_JSON="$(cat "$GSPREAD_JSON_PATH")"
+fi
+
+# ログディレクトリ確保 + 古いログ削除 (7日超)
+mkdir -p logs
+find logs -name "*.log" -type f -mtime +7 -delete 2>/dev/null
+
+LOG_FILE="logs/ielove_$(date +%Y-%m-%d).log"
+
+{
+    echo "===== $(date '+%Y-%m-%d %H:%M:%S') 実行開始 (SERVICES=$SERVICES_TO_RUN) ====="
+} >> "$LOG_FILE"
+
+# 本体実行
+SERVICES="$SERVICES_TO_RUN" python3 main.py >> "$LOG_FILE" 2>&1
+EXIT_CODE=$?
+
+echo "===== $(date '+%Y-%m-%d %H:%M:%S') 終了 (exit=$EXIT_CODE) =====" >> "$LOG_FILE"
+
+# ── 失敗通知 (Discord) ──────────────────────
+# exit code が非0 か、ログに「IELBBログイン失敗」が含まれていれば Discord に通知
+NEEDS_NOTIFY=0
+if [ $EXIT_CODE -ne 0 ]; then
+    NEEDS_NOTIFY=1
+fi
+if grep -q "IELBBログイン失敗" "$LOG_FILE"; then
+    NEEDS_NOTIFY=1
+fi
+
+if [ $NEEDS_NOTIFY -eq 1 ] && [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+    MSG="⚠️ vacancy-checker (Mac/ielove) 失敗 at $(date '+%Y-%m-%d %H:%M:%S') exit=$EXIT_CODE\nログ: $SCRIPT_DIR/$LOG_FILE"
+    curl -sS -X POST -H "Content-Type: application/json" \
+        --data "{\"content\":\"$MSG\"}" \
+        "$DISCORD_WEBHOOK_URL" > /dev/null || true
+fi
+
+exit $EXIT_CODE
