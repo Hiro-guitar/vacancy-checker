@@ -410,11 +410,38 @@ def check_ielove(driver, url, row_num):
         return True
 
 # === 順番に実行 ===
-for target in [
-    ("es-square.net", login_es, check_es),
-    ("itandibb.com", login_itandi, check_itandi),
-    ("bb.ielove.jp", login_ielove, check_ielove)
-]:
+ALL_SERVICES = [
+    # (URL keyword, login func, check func, alias)
+    ("es-square.net",  login_es,     check_es,     "es"),
+    ("itandibb.com",   login_itandi, check_itandi, "itandi"),
+    ("bb.ielove.jp",   login_ielove, check_ielove, "ielove"),
+]
+
+# 環境変数 SERVICES で実行対象を選択 (デフォルト all)。
+# 例: SERVICES=ielove python main.py
+#     SERVICES=ielove,itandi python main.py
+#     SERVICES=all (or 未設定) → 全部実行
+# alias / URL keyword どちらでも部分一致でマッチ。
+_selected_env = os.environ.get('SERVICES', 'all').strip().lower()
+if _selected_env and _selected_env != 'all':
+    _wanted = [w.strip() for w in _selected_env.split(',') if w.strip()]
+    _filtered = []
+    for svc in ALL_SERVICES:
+        url_kw, _, _, alias = svc
+        if any(w == alias or w in url_kw.lower() for w in _wanted):
+            _filtered.append(svc)
+    if not _filtered:
+        print(f"⚠ SERVICES='{_selected_env}' にマッチするサービスがありません。 利用可能: " +
+              ", ".join(s[3] for s in ALL_SERVICES))
+        targets = []
+    else:
+        targets = _filtered
+        print(f"📌 SERVICES='{_selected_env}' → 対象: " + ", ".join(s[0] for s in targets))
+else:
+    targets = ALL_SERVICES
+    print("📌 SERVICES=all → 全サービス実行")
+
+for target in targets:
     driver = create_driver()
     process_rows(driver, target[1], target[0], target[2])
     driver.quit()

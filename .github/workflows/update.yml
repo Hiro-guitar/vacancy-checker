@@ -4,6 +4,20 @@ on:
   schedule:
     - cron: '0 * * * *'  # 毎時0分に実行
   workflow_dispatch:
+    inputs:
+      services:
+        description: '実行するサービス (all / ielove / itandi / es またはカンマ区切り)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ielove
+          - itandi
+          - es
+          - ielove,itandi
+          - ielove,es
+          - itandi,es
 
 jobs:
   check:
@@ -34,9 +48,12 @@ jobs:
           ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
           ITANDI_EMAIL: ${{ secrets.ITANDI_EMAIL }}
           ITANDI_PASSWORD: ${{ secrets.ITANDI_PASSWORD }}
-          IELOVE_ID: ${{ secrets.IELOVE_ID }}            
-          IELOVE_PASSWORD: ${{ secrets.IELOVE_PASSWORD }}  
+          IELOVE_ID: ${{ secrets.IELOVE_ID }}
+          IELOVE_PASSWORD: ${{ secrets.IELOVE_PASSWORD }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          # workflow_dispatch から渡された値を使用。
+          # cron 実行時 (inputs が無い時) は 'all' にフォールバック。
+          SERVICES: ${{ github.event.inputs.services || 'all' }}
 
       - name: Upload screenshots
         if: always()
