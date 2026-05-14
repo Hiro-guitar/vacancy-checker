@@ -221,40 +221,87 @@ def login_ielove(driver):
         url = row[URL_COL - 1].strip()
         if "bb.ielove.jp" not in url:
             continue
+        step = "start"
         try:
+            step = "navigate"
             driver.get("https://bb.ielove.jp/ielovebb/login/login/")
+            print(f"  [ielove] URL after navigate: {driver.current_url}")
+
             # フォーム本体を待つ。 input の name/id は毎回ハッシュ化されて変わるため
             # 直接指定せず form scope + type で取得する (Chrome 拡張と同じ戦略)。
+            step = "wait_form"
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "form#loginForm"))
             )
-            id_input = driver.find_element(
-                By.CSS_SELECTOR, "form#loginForm input[type='text']"
-            )
-            pw_input = driver.find_element(
-                By.CSS_SELECTOR, "form#loginForm input[type='password']"
-            )
+            print("  [ielove] form#loginForm 検出")
+
+            step = "find_inputs"
+            id_inputs = driver.find_elements(By.CSS_SELECTOR, "form#loginForm input[type='text']")
+            pw_inputs = driver.find_elements(By.CSS_SELECTOR, "form#loginForm input[type='password']")
+            print(f"  [ielove] inputs: text={len(id_inputs)}件 / password={len(pw_inputs)}件")
+            if not id_inputs or not pw_inputs:
+                # フォーム scope で見つからない時のフォールバック: ページ全体から探す
+                if not id_inputs:
+                    id_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='text']")
+                if not pw_inputs:
+                    pw_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
+                print(f"  [ielove] fallback: text={len(id_inputs)}件 / password={len(pw_inputs)}件")
+
+            if not id_inputs or not pw_inputs:
+                raise RuntimeError(
+                    f"input 未検出 (text={len(id_inputs)}, password={len(pw_inputs)})"
+                )
+
+            id_input = id_inputs[0]
+            pw_input = pw_inputs[0]
+
+            step = "fill"
             id_input.send_keys(os.environ["IELOVE_ID"])
             pw_input.send_keys(os.environ["IELOVE_PASSWORD"])
-            # 送信ボタン (id="loginButton" は安定、ハッシュ化されていない)
-            try:
-                submit_btn = driver.find_element(By.ID, "loginButton")
-            except Exception:
-                submit_btn = driver.find_element(
-                    By.CSS_SELECTOR, "form#loginForm input[type='submit'], form#loginForm button[type='submit']"
+
+            step = "find_submit"
+            submit_btns = driver.find_elements(By.ID, "loginButton")
+            if not submit_btns:
+                submit_btns = driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "form#loginForm input[type='submit'], form#loginForm button[type='submit']",
                 )
-            submit_btn.click()
+            print(f"  [ielove] submit候補: {len(submit_btns)}件")
+            if not submit_btns:
+                raise RuntimeError("送信ボタン未検出")
+
+            step = "click_submit"
+            submit_btns[0].click()
+
             # ログイン後判定: URL が /login/ から離脱したかを確認
-            # (旧実装は div.savedSearch__title を待っていたがこれも UI 更新で壊れやすい)
+            step = "wait_redirect"
             WebDriverWait(driver, 20).until(
                 lambda d: "/login/" not in d.current_url
             )
+            print(f"  [ielove] redirect 完了 URL={driver.current_url}")
             print("✅ IELBBログイン成功")
             return True
         except Exception as e:
-            # 例外メッセージが空の場合(TimeoutException など)も型名で判別できるよう型名も出力
-            err_msg = str(e).strip() or type(e).__name__
-            print(f"❌ IELBBログイン失敗: {err_msg}")
+            # Selenium の例外は str(e) で長文の Message+Stacktrace が出るので、
+            # 型名 + msg属性のみを抜き出す。失敗ステップとURLも記録。
+            err_type = type(e).__name__
+            err_short = (getattr(e, "msg", "") or str(e).splitlines()[0] if str(e) else "").strip() or "(no message)"
+            try:
+                current_url = driver.current_url
+                page_title = driver.title
+            except Exception:
+                current_url = "(取得失敗)"
+                page_title = "(取得失敗)"
+            print(f"❌ IELBBログイン失敗 step={step} type={err_type} msg={err_short[:200]}")
+            print(f"  [ielove] 失敗時 URL={current_url} title={page_title}")
+            # 失敗時のスクリーンショット保存
+            try:
+                ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                shot = f"screenshots/ielove_login_error_{ts}.png"
+                driver.save_screenshot(shot)
+                print(f"  [ielove] スクショ保存: {shot}")
+            except Exception:
+                pass
             return False
     return False
 
