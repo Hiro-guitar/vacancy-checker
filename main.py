@@ -223,19 +223,38 @@ def login_ielove(driver):
             continue
         try:
             driver.get("https://bb.ielove.jp/ielovebb/login/login/")
+            # フォーム本体を待つ。 input の name/id は毎回ハッシュ化されて変わるため
+            # 直接指定せず form scope + type で取得する (Chrome 拡張と同じ戦略)。
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "_4407f7df050aca29f5b0c2592fb48e60"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "form#loginForm"))
             )
-            driver.find_element(By.ID, "_4407f7df050aca29f5b0c2592fb48e60").send_keys(os.environ["IELOVE_ID"])
-            driver.find_element(By.ID, "_81fa5c7af7ae14682b577f42624eb1c0").send_keys(os.environ["IELOVE_PASSWORD"])
-            driver.find_element(By.ID, "loginButton").click()
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.savedSearch__title"))
+            id_input = driver.find_element(
+                By.CSS_SELECTOR, "form#loginForm input[type='text']"
+            )
+            pw_input = driver.find_element(
+                By.CSS_SELECTOR, "form#loginForm input[type='password']"
+            )
+            id_input.send_keys(os.environ["IELOVE_ID"])
+            pw_input.send_keys(os.environ["IELOVE_PASSWORD"])
+            # 送信ボタン (id="loginButton" は安定、ハッシュ化されていない)
+            try:
+                submit_btn = driver.find_element(By.ID, "loginButton")
+            except Exception:
+                submit_btn = driver.find_element(
+                    By.CSS_SELECTOR, "form#loginForm input[type='submit'], form#loginForm button[type='submit']"
+                )
+            submit_btn.click()
+            # ログイン後判定: URL が /login/ から離脱したかを確認
+            # (旧実装は div.savedSearch__title を待っていたがこれも UI 更新で壊れやすい)
+            WebDriverWait(driver, 20).until(
+                lambda d: "/login/" not in d.current_url
             )
             print("✅ IELBBログイン成功")
             return True
         except Exception as e:
-            print(f"❌ IELBBログイン失敗: {e}")
+            # 例外メッセージが空の場合(TimeoutException など)も型名で判別できるよう型名も出力
+            err_msg = str(e).strip() or type(e).__name__
+            print(f"❌ IELBBログイン失敗: {err_msg}")
             return False
     return False
 
