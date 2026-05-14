@@ -19,19 +19,23 @@ on:
           - ielove,es
           - itandi,es
       os:
-        description: '実行OS (IP切り替えテスト用。常用は ubuntu-latest 推奨)'
+        description: '実行OS (常用は self-hosted、デバッグ用に他も選択可)'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
+          - self-hosted
           - ubuntu-latest
           - macos-latest
           - windows-latest
 
 jobs:
   check:
-    # cron や input なしの時は ubuntu-latest にフォールバック (無料枠の都合)
-    runs-on: ${{ github.event.inputs.os || 'ubuntu-latest' }}
+    # いえらぶBB が GitHub Actions のクラウドIP (Azure等) を 403 で拒否する
+    # ようになったため、家庭 IP でアクセスする self-hosted runner を既定に。
+    # cron や input なしの時は self-hosted にフォールバック。
+    # クラウドrunner で再試行したい時は workflow_dispatch から os を選択。
+    runs-on: ${{ github.event.inputs.os || 'self-hosted' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
