@@ -238,10 +238,12 @@ def check_itandi(driver, url, row_num):
     return not has_open
 
 def login_ielove(driver):
-    # Selenium とは別経路 (requests) で 403 の原因を切り分け診断。
-    # Selenium だと leak される情報が多くてサーバ判定が変わる可能性があるため、
-    # シンプルな HTTP リクエストでも同様の 403 になるかを確認する。
+    # トップから辿るとログインに通るか診断する。
+    # トップは Apache 配信 (200 OK)、ログインページは AWS ELB 配下 (403)
+    # と判明済みだが、トップから session/cookie を持って遷移すれば通る
+    # 可能性を検証する。
     try:
+        import re
         import requests
         common_headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
@@ -249,25 +251,40 @@ def login_ielove(driver):
             'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
         }
-        diagnostics = [
-            ('top no-referer', 'https://bb.ielove.jp/', {}),
-            ('login no-referer', 'https://bb.ielove.jp/ielovebb/login/login/', {}),
-            ('login + ref=index', 'https://bb.ielove.jp/ielovebb/login/login/',
-                {'Referer': 'https://bb.ielove.jp/ielovebb/rent/index/'}),
-            ('login + ref=top', 'https://bb.ielove.jp/ielovebb/login/login/',
-                {'Referer': 'https://bb.ielove.jp/'}),
-        ]
-        for label, diag_url, extra_h in diagnostics:
+        session = requests.Session()
+        # 1. トップを取得 (cookie 確保 + ログインリンク抽出のため)
+        r_top = session.get('https://bb.ielove.jp/', headers=common_headers, timeout=15)
+        print(f"  [ielove diag] top: status={r_top.status_code} server={r_top.headers.get('Server','?')} cookies={len(session.cookies)}件")
+        # 2. トップ HTML から login を含む href を抽出
+        login_hrefs = re.findall(r'href=["\']([^"\']*login[^"\']*)["\']', r_top.text or '', re.I)
+        # 重複削除
+        seen = set()
+        unique_login = []
+        for h in login_hrefs:
+            if h not in seen:
+                seen.add(h)
+                unique_login.append(h)
+        print(f"  [ielove diag] top のログイン関連 href ({len(unique_login)}件): {unique_login[:8]}")
+        # 3. 抽出した login リンクへ session(cookie)+Referer=top で GET
+        for href in unique_login[:8]:
+            full_url = href if href.startswith('http') else (
+                ('https://bb.ielove.jp' + href) if href.startswith('/') else
+                ('https://bb.ielove.jp/' + href)
+            )
             try:
-                r = requests.get(diag_url, headers={**common_headers, **extra_h},
-                                 timeout=15, allow_redirects=False)
+                r = session.get(full_url,
+                                headers={**common_headers, 'Referer': 'https://bb.ielove.jp/'},
+                                timeout=15, allow_redirects=False)
                 server = r.headers.get('Server', '?')
-                cf_ray = r.headers.get('CF-Ray', '')
                 location = r.headers.get('Location', '')
-                body_head = (r.text[:80] if r.text else '').replace('\n', ' ')
-                print(f"  [ielove diag] {label}: status={r.status_code} server={server} cf-ray={cf_ray} loc={location[:60]} body={body_head}")
+                print(f"  [ielove diag] login link: {full_url[:80]} → status={r.status_code} server={server} loc={location[:60]}")
             except Exception as ex:
-                print(f"  [ielove diag] {label}: ERROR {type(ex).__name__} {ex}")
+                print(f"  [ielove diag] login link: {full_url[:80]} → ERROR {type(ex).__name__}")
+        # 4. 念のため /ielovebb/login/login/ を session+Referer=top で再度試す
+        r_login = session.get('https://bb.ielove.jp/ielovebb/login/login/',
+                              headers={**common_headers, 'Referer': 'https://bb.ielove.jp/'},
+                              timeout=15, allow_redirects=False)
+        print(f"  [ielove diag] /ielovebb/login/login/ session+ref=top: status={r_login.status_code} server={r_login.headers.get('Server','?')}")
     except Exception as e:
         print(f"  [ielove diag] 全体例外: {type(e).__name__} {e}")
 
