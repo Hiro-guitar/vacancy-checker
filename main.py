@@ -66,6 +66,16 @@ sheet = client.open_by_key(os.environ['SPREADSHEET_ID']).worksheet("シート1")
 URL_COL = 13
 STATUS_COL = 9
 ENDED_COL = 11
+
+# サービス別の「最終実行日時」を記録する列 (1-indexed)。
+# 該当サービスを処理した時に毎回 JST 現在時刻を書き込む。
+# 必要に応じて他サービスも追加可能 (例: 'es-square.net': 15)。
+# ※ スプレッドシート 1行目のヘッダーは手動で設定してください。
+#   N列: 「最終実行日時(いえらぶ)」 など分かりやすく。
+LAST_CHECKED_COLS = {
+    'bb.ielove.jp': 14,  # N列
+}
+
 all_rows = sheet.get_all_values()[1:]
 
 # === 共通処理 ===
@@ -99,6 +109,15 @@ def process_rows(driver, login_func, url_keyword, checker_func):
                 sheet.update_cell(row_num, STATUS_COL, "募集中")
                 if current_date != "":
                     sheet.update_cell(row_num, ENDED_COL, "")
+
+            # サービス別「最終実行日時」を記録 (現状はいえらぶのみ)。
+            # チェックが完走した時刻を入れることで、最終確認時刻が一目で分かる。
+            last_checked_col = LAST_CHECKED_COLS.get(url_keyword)
+            if last_checked_col:
+                try:
+                    sheet.update_cell(row_num, last_checked_col, now_jst.strftime("%Y-%m-%d %H:%M"))
+                except Exception as upd_err:
+                    print(f"⚠ Row {row_num} 最終実行日時の書き込み失敗: {upd_err}")
 
         except Exception as e:
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
