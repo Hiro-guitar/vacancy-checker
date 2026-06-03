@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       services:
-        description: '実行するサービス (all / ielove / itandi / es またはカンマ区切り)'
+        description: '実行するサービス (all / ielove / itandi またはカンマ区切り)'
         required: false
         default: 'all'
         type: choice
@@ -14,10 +14,7 @@ on:
           - all
           - ielove
           - itandi
-          - es
           - ielove,itandi
-          - ielove,es
-          - itandi,es
       os:
         description: '実行OS (常用は ubuntu-latest、IPテスト用に他も選択可)'
         required: false
@@ -31,7 +28,8 @@ on:
 
 jobs:
   check:
-    # ES + itandi はクラウド IP で問題なく動くため ubuntu-latest を既定に。
+    # 2026-06-03: いい生活Square(es) は規約違反(機械的取得)でアカウントBANのため恒久削除。
+    # itandi はクラウド IP で問題なく動くため ubuntu-latest を既定に。
     # bb.ielove.jp は別途 Mac 側 cron (家庭 IP) で実行する。
     runs-on: ${{ github.event.inputs.os || 'ubuntu-latest' }}
     steps:
@@ -57,18 +55,18 @@ jobs:
         run: python main.py
         env:
           GSPREAD_JSON: ${{ secrets.GSPREAD_JSON }}
-          ES_EMAIL: ${{ secrets.ES_EMAIL }}
-          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          # 2026-06-03: ES_EMAIL/ES_PASSWORD は いい生活Square BAN により恒久削除。
           ITANDI_EMAIL: ${{ secrets.ITANDI_EMAIL }}
           ITANDI_PASSWORD: ${{ secrets.ITANDI_PASSWORD }}
           IELOVE_ID: ${{ secrets.IELOVE_ID }}
           IELOVE_PASSWORD: ${{ secrets.IELOVE_PASSWORD }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-          # cron 実行時 (inputs 無し) は ES と itandi だけ走らせる。
+          # cron 実行時 (inputs 無し) は itandi だけ走らせる。
+          # (いい生活Square=es は規約違反BANのため削除済み)
           # bb.ielove.jp は GitHub Actions のクラウドIPでは 403 で弾かれるため
           # 家庭 IP の Mac (cron) 側で別途 SERVICES=ielove で実行する運用。
           # 手動 (workflow_dispatch) で services を選んだ場合はその値を優先。
-          SERVICES: ${{ github.event.inputs.services || 'es,itandi' }}
+          SERVICES: ${{ github.event.inputs.services || 'itandi' }}
 
       - name: Upload screenshots
         if: always()

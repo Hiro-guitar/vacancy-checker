@@ -108,6 +108,11 @@ def check_suumo(driver, info, index):
     return match_count
 
 def main():
+    # 2026-06-03: このスクリプトは全体が いい生活Square(es-square) のスクレイピング。
+    # 規約違反(機械的取得)でアカウントBANされたため恒久停止。再開はBAN逃れになるため不可。
+    print("⛔ discover.py は いい生活Square 停止(規約違反BAN)に伴い無効化されています。何もせず終了します。")
+    return
+    # ↓ 旧ロジック(無効化済み・参考保持)
     driver = create_driver()
     send_discord("🔍 調査を開始します")
     

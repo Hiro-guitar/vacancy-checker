@@ -454,7 +454,8 @@ def check_ielove(driver, url, row_num):
 # === 順番に実行 ===
 ALL_SERVICES = [
     # (URL keyword, login func, check func, alias)
-    ("es-square.net",  login_es,     check_es,     "es"),
+    # 2026-06-03: いい生活Square(es) は規約違反(機械的取得)でアカウントBANのため恒久削除。
+    # 再開はBAN逃れになるため不可。login_es/check_es は未使用(参考保持)。
     ("itandibb.com",   login_itandi, check_itandi, "itandi"),
     ("bb.ielove.jp",   login_ielove, check_ielove, "ielove"),
 ]
